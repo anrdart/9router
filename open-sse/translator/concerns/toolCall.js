@@ -117,7 +117,13 @@ export function hasToolResults(msg, toolCallIds) {
   return false;
 }
 
-// Fix missing tool responses - insert empty tool_result if assistant has tool_use but next message has no tool_result
+// Fix missing tool responses: insert an empty tool_result for any tool_use that never receives
+// any result later in the conversation. Previously this only inspected the IMMEDIATELY following
+// message, so a tool_result appearing one message later (e.g. with a user/system message in
+// between, or batched results) triggered a bogus empty result while the genuine later result was
+// left orphaned — provoking 400 "tool_result without matching tool_use" / "unknown tool_call_id"
+// on strict providers. The scan-ahead version checks whether ANY subsequent message answers each
+// tool call before deciding to synthesize a placeholder.
 export function fixMissingToolResponses(body) {
   if (!body.messages || !Array.isArray(body.messages)) return body;
 
@@ -125,7 +131,6 @@ export function fixMissingToolResponses(body) {
 
   for (let i = 0; i < body.messages.length; i++) {
     const msg = body.messages[i];
-    const nextMsg = body.messages[i + 1];
 
     newMessages.push(msg);
 
@@ -133,21 +138,42 @@ export function fixMissingToolResponses(body) {
     const toolCallIds = getToolCallIds(msg);
     if (toolCallIds.length === 0) continue;
 
-    // Check if next message has tool_result
-    if (nextMsg && !hasToolResults(nextMsg, toolCallIds)) {
-      // Insert tool responses for each tool_call
-      for (const id of toolCallIds) {
-        // OpenAI format: role = "tool"
-        newMessages.push({
-          role: "tool",
-          tool_call_id: id,
-          content: ""
-        });
+    // Find which of this message's tool calls are answered by SOME later message (any distance).
+    const answeredIds = new Set();
+    for (let j = i + 1; j < body.messages.length; j++) {
+      const later = body.messages[j];
+      if (later && hasToolResults(later, toolCallIds)) {
+        // Collect the specific ids this later message answers.
+        collectAnsweredIds(later, toolCallIds, answeredIds);
+      }
+    }
+
+    // Only synthesize placeholders for tool calls that are genuinely never answered anywhere
+    // downstream. Answered calls (even non-contiguously) are left alone.
+    for (const id of toolCallIds) {
+      if (!answeredIds.has(id)) {
+        newMessages.push({ role: "tool", tool_call_id: id, content: "" });
       }
     }
   }
 
   body.messages = newMessages;
   return body;
+}
+
+// Record the tool_call_ids present in `msg` that belong to `toolCallIds` into `out`.
+function collectAnsweredIds(msg, toolCallIds, out) {
+  if (!msg) return;
+  if (msg.role === "tool" && msg.tool_call_id && toolCallIds.includes(msg.tool_call_id)) {
+    out.add(msg.tool_call_id);
+    return;
+  }
+  if (msg.role === "user" && Array.isArray(msg.content)) {
+    for (const block of msg.content) {
+      if (block.type === "tool_result" && toolCallIds.includes(block.tool_use_id)) {
+        out.add(block.tool_use_id);
+      }
+    }
+  }
 }
 

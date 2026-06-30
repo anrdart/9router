@@ -33,7 +33,9 @@ export async function createDashboardAuthToken(claims = {}) {
   return new SignJWT({ authenticated: true, ...claims })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("24h")
+    // A force-change token is short-lived: it only grants access to set a new
+    // password, so 10 minutes is plenty and limits the window if intercepted.
+    .setExpirationTime(claims.force_password_change ? "10m" : "24h")
     .sign(SECRET);
 }
 

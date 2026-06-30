@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PROVIDER_MODELS, getModelTargetFormat } from "../../open-sse/config/providerModels.js";
 import { OpenCodeGoExecutor } from "../../open-sse/executors/opencode-go.js";
+import { runRequestContext, setRequestContext } from "../../open-sse/executors/requestContext.js";
 
 const CHAT_MODELS = [
   "glm-5.2",
@@ -49,11 +50,15 @@ describe("OpenCode Go endpoint routing", () => {
     const executor = new OpenCodeGoExecutor();
 
     for (const model of MESSAGES_MODELS) {
-      expect(executor.buildUrl(model)).toBe("https://opencode.ai/zen/go/v1/messages");
-      const headers = executor.buildHeaders({ apiKey: "sk-test" }, false);
-      expect(headers["x-api-key"]).toBe("sk-test");
-      expect(headers["anthropic-version"]).toBeDefined();
-      expect(headers.Authorization).toBeUndefined();
+      // buildHeaders reads the model from the per-request context (set by buildUrl / execute).
+      // Mirror that flow inside a request context so the routing decision is available.
+      runRequestContext(() => {
+        expect(executor.buildUrl(model)).toBe("https://opencode.ai/zen/go/v1/messages");
+        const headers = executor.buildHeaders({ apiKey: "sk-test" }, false);
+        expect(headers["x-api-key"]).toBe("sk-test");
+        expect(headers["anthropic-version"]).toBeDefined();
+        expect(headers.Authorization).toBeUndefined();
+      });
     }
   });
 
@@ -61,11 +66,13 @@ describe("OpenCode Go endpoint routing", () => {
     const executor = new OpenCodeGoExecutor();
 
     for (const model of CHAT_MODELS) {
-      expect(executor.buildUrl(model)).toBe("https://opencode.ai/zen/go/v1/chat/completions");
-      const headers = executor.buildHeaders({ apiKey: "sk-test" }, false);
-      expect(headers.Authorization).toBe("Bearer sk-test");
-      expect(headers["x-api-key"]).toBeUndefined();
-      expect(headers["anthropic-version"]).toBeUndefined();
+      runRequestContext(() => {
+        expect(executor.buildUrl(model)).toBe("https://opencode.ai/zen/go/v1/chat/completions");
+        const headers = executor.buildHeaders({ apiKey: "sk-test" }, false);
+        expect(headers.Authorization).toBe("Bearer sk-test");
+        expect(headers["x-api-key"]).toBeUndefined();
+        expect(headers["anthropic-version"]).toBeUndefined();
+      });
     }
   });
 });

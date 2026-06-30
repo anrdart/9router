@@ -277,7 +277,14 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
         }
         try {
           const retryResult = await executor.execute({ model, body: translatedBody, stream, credentials, signal: streamController.signal, log, proxyOptions });
-          if (retryResult.response.ok) { providerResponse = retryResult.response; providerUrl = retryResult.url; }
+          if (retryResult.response.ok) {
+            // Drain/cancel the original 401/403 response body before discarding the reference.
+            // Without this the upstream socket (and its keep-alive connection) is pinned by the
+            // unconsumed body until GC, leaking one connection per refresh-retry.
+            try { await providerResponse.body?.cancel?.(); } catch { /* best-effort */ }
+            providerResponse = retryResult.response;
+            providerUrl = retryResult.url;
+          }
         } catch { log?.warn?.("TOKEN", `${provider.toUpperCase()} | retry after refresh failed`); }
       } else {
         log?.warn?.("TOKEN", `${provider.toUpperCase()} | refresh failed`);

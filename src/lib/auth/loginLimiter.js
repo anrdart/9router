@@ -46,15 +46,20 @@ export function recordSuccess(ip) {
 }
 
 export function getClientIp(request) {
-  // Trusted: set from TCP socket by custom-server.js (client cannot spoof).
+  // x-9r-real-ip is only trustworthy when stamped by custom-server.js, which also sets
+  // x-9r-via-proxy. Under bare `next start` the header is client-supplied and an attacker could
+  // pin a unique value per request to escape the limiter — so ignore it unless via-proxy proves
+  // custom-server ran. This mirrors the trust model in dashboardGuard.isLocalRequest().
   const realIp = request.headers.get("x-9r-real-ip");
-  if (realIp) return realIp;
+  if (realIp && request.headers.get("x-9r-via-proxy")) return realIp;
   // Behind a trusted reverse proxy that overwrites XFF with the real client IP.
   if (process.env.TRUST_PROXY === "true") {
     const xff = request.headers.get("x-forwarded-for");
     if (xff) return xff.split(",")[0].trim();
   }
-  // Direct exposure without custom-server: single bucket so spoofed XFF
-  // rotation cannot escape the limiter.
+  // Direct exposure without custom-server: a single shared bucket. This deliberately trades a
+  // remote-attacker-induced lockout of the shared bucket for protection against brute force
+  // (which is the greater risk for a default-password endpoint). A local admin can still log in
+  // even while the remote bucket is locked: checkLock is bypassed for loopback in the login route.
   return "unknown";
 }

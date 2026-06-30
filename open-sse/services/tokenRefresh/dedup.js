@@ -19,7 +19,15 @@ export async function dedupRefresh(provider, oldToken, fn, log) {
   const promise = (async () => {
     try {
       const result = await fn();
-      refreshDedupCache.set(key, { result, expiresAt: Date.now() + REFRESH_RESULT_TTL_MS });
+      // Provider refresh functions resolve to null on transient failures (network blip, upstream
+      // 5xx) rather than throwing. Caching that null for 10s would take the whole connection
+      // offline even though the very next attempt would likely succeed. Only cache a genuine
+      // (non-null) refresh result; a null result leaves the key un-cached so callers retry.
+      if (result) {
+        refreshDedupCache.set(key, { result, expiresAt: Date.now() + REFRESH_RESULT_TTL_MS });
+      } else {
+        refreshDedupCache.delete(key);
+      }
       return result;
     } catch (err) {
       refreshDedupCache.delete(key);

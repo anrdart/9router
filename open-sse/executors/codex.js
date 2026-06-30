@@ -1,6 +1,7 @@
 import { BaseExecutor } from "./base.js";
 import { CODEX_DEFAULT_INSTRUCTIONS } from "../config/codexInstructions.js";
 import { PROVIDERS } from "../config/providers.js";
+import { getRequestContext, setRequestContext } from "./requestContext.js";
 import {
   refreshProviderCredentials,
   shouldRefreshCredentials,
@@ -123,16 +124,19 @@ function resolveCacheSessionId(body, credentials) {
 export class CodexExecutor extends BaseExecutor {
   constructor() {
     super("codex", PROVIDERS.codex);
-    this._currentSessionId = null;
+    // NOTE: per-request state (compact flag, session id) lives in the AsyncLocalStorage
+    // request context (requestContext.js), NOT on `this`. This executor is a singleton shared
+    // across concurrent requests, so instance fields would cross-contaminate.
   }
 
   /**
    * Override headers to add codex-specific identity headers.
-   * transformRequest runs BEFORE buildHeaders, sets this._currentSessionId.
+   * transformRequest runs BEFORE buildHeaders and stores the session id in the request context.
    */
   buildHeaders(credentials, stream = true) {
     const headers = super.buildHeaders(credentials, stream);
-    headers["session_id"] = this._currentSessionId || credentials?.connectionId || "default";
+    const ctx = getRequestContext();
+    headers["session_id"] = ctx.currentSessionId || credentials?.connectionId || "default";
     // Identify client type to Codex backend (matches official codex CLI)
     if (!headers["originator"]) headers["originator"] = "codex_cli_rs";
     // Workspace binding header — improves account scope + cache affinity
@@ -145,7 +149,7 @@ export class CodexExecutor extends BaseExecutor {
 
   buildUrl(model, stream, urlIndex = 0, credentials = null) {
     const base = super.buildUrl(model, stream, urlIndex, credentials);
-    return this._isCompact ? `${base}/compact` : base;
+    return getRequestContext().isCompact ? `${base}/compact` : base;
   }
 
   async refreshCredentials(credentials, log) {
@@ -254,23 +258,31 @@ export class CodexExecutor extends BaseExecutor {
     }
     reader.releaseLock();
 
-    // Re-assemble stream: prefix chunks + remaining upstream body
+    // Re-assemble stream: prefix chunks + remaining upstream body. The upstream reader is acquired
+    // LAZILY in pull()/cancel(), NOT in start(). Acquiring it eagerly in start() locked the body
+    // immediately: on the overloaded-retry path the replacementBody was discarded unused, yet its
+    // start() had already grabbed a reader, so result.response.body.cancel() then threw "cannot
+    // cancel a stream with an active reader" (swallowed) and the upstream socket leaked until GC.
+    // Lazy acquisition means an unconsumed replacementBody holds no reader and can be dropped freely.
     const upstream = response.body;
     let upstreamReader = null;
+    function getUpstreamReader() {
+      if (!upstreamReader) upstreamReader = upstream.getReader();
+      return upstreamReader;
+    }
     const replacementBody = new ReadableStream({
       start(controller) {
         for (const c of chunks) controller.enqueue(c);
-        upstreamReader = upstream.getReader();
       },
       async pull(controller) {
         try {
-          const { done, value } = await upstreamReader.read();
+          const { done, value } = await getUpstreamReader().read();
           if (done) { controller.close(); return; }
           controller.enqueue(value);
         } catch (e) { controller.error(e); }
       },
       cancel(reason) {
-        try { upstreamReader?.cancel(reason); } catch { /* noop */ }
+        try { getUpstreamReader().cancel(reason); } catch { /* noop */ }
       },
     });
     return { matched, replacementBody };
@@ -306,10 +318,11 @@ export class CodexExecutor extends BaseExecutor {
    * Image fetching is handled separately in prefetchImages() so this stays sync.
    */
   transformRequest(model, body, stream, credentials) {
-    this._isCompact = !!body._compact;
+    setRequestContext({ isCompact: !!body._compact });
     delete body._compact;
     // Resolve conversation-stable session_id (priority: body → assistant-text → workspace → machine)
-    this._currentSessionId = resolveCacheSessionId(body, credentials);
+    const currentSessionId = resolveCacheSessionId(body, credentials);
+    setRequestContext({ currentSessionId });
     // Convert string input to array format (Codex API requires input as array)
     const normalized = normalizeResponsesInput(body.input);
     if (normalized) body.input = normalized;
@@ -338,8 +351,8 @@ export class CodexExecutor extends BaseExecutor {
     body.store = false;
 
     // Inject prompt_cache_key for stable Codex prompt caching
-    if (!body.prompt_cache_key && this._currentSessionId) {
-      body.prompt_cache_key = this._currentSessionId;
+    if (!body.prompt_cache_key && currentSessionId) {
+      body.prompt_cache_key = currentSessionId;
     }
 
     // Map virtual Codex review models to the upstream Codex model before suffix parsing.

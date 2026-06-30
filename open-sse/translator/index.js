@@ -232,10 +232,15 @@ export function initState(sourceFormat) {
       responseId: `resp_${Date.now()}`,
       created: Math.floor(Date.now() / 1000),
       started: false,
+      // Single monotonic counter so reasoning, message and each function-call item each get a
+      // unique output_index in the Responses stream (see startReasoning/emitTextContent/emitToolCall).
+      outputIndex: 0,
       msgTextBuf: {},
       msgItemAdded: {},
       msgContentAdded: {},
       msgItemDone: {},
+      msgOutputIndex: undefined,
+      msgId: undefined,
       reasoningId: "",
       reasoningIndex: -1,
       reasoningBuf: "",
@@ -247,6 +252,7 @@ export function initState(sourceFormat) {
       funcCallIds: {},
       funcArgsDone: {},
       funcItemDone: {},
+      funcOutputIndex: {},
       completedSent: false
     };
   }

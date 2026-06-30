@@ -1,6 +1,7 @@
 // Guards D3: antigravity 429/503 retry merged into base via computeRetryDelay hook.
 import { describe, it, expect } from "vitest";
 import { AntigravityExecutor } from "../../open-sse/executors/antigravity.js";
+import { runRequestContext, setRequestContext } from "../../open-sse/executors/requestContext.js";
 
 const MAX = 10000;
 function res(status, headers = {}, body = null) {
@@ -67,8 +68,14 @@ describe("antigravity computeRetryDelay hook (D3)", () => {
   });
 
   it("buildHeaders includes cached session id after transformRequest", () => {
-    ag._lastSessionId = "sess-123";
-    const h = ag.buildHeaders({ accessToken: "tok" }, true);
-    expect(h["X-Machine-Session-Id"]).toBe("sess-123");
+    // Session id is now stored in the per-request AsyncLocalStorage context (not an instance
+    // field) so concurrent requests to the singleton executor can't cross-contaminate. Mirror
+    // the production flow: run inside a request context that transformRequest would populate.
+    runRequestContext(() => {
+      // transformRequest normally sets lastSessionId; emulate the relevant part here.
+      setRequestContext({ lastSessionId: "sess-123" });
+      const h = ag.buildHeaders({ accessToken: "tok" }, true);
+      expect(h["X-Machine-Session-Id"]).toBe("sess-123");
+    });
   });
 });

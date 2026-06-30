@@ -19,6 +19,18 @@ export function backupFile(srcPath, destDir, destName = null) {
   const name = destName || path.basename(srcPath);
   const dest = path.join(destDir, name);
   fs.copyFileSync(srcPath, dest);
+
+  // SQLite WAL mode keeps recently-committed transactions in `<db>-wal` (and a shared-memory
+  // `<db>-shm` index) until a checkpoint. Copying only data.sqlite captured a stale snapshot
+  // missing the last checkpoint window — and this backup is the user's only recovery path if a
+  // migration corrupts the DB. Copy the sidecars too so the backup is a complete, restorable
+  // snapshot. (For the sql.js driver there are no sidecars, so these are simply absent.)
+  for (const suffix of ["-wal", "-shm"]) {
+    const sideSrc = `${srcPath}${suffix}`;
+    if (fs.existsSync(sideSrc)) {
+      try { fs.copyFileSync(sideSrc, path.join(destDir, `${name}${suffix}`)); } catch { /* best-effort */ }
+    }
+  }
   return dest;
 }
 

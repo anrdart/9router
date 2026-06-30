@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   validateApiKey: vi.fn(),
   getConsistentMachineId: vi.fn(),
   verifyDashboardAuthToken: vi.fn(),
+  getDashboardAuthSession: vi.fn(() => null),
 }));
 
 vi.mock("next/server", () => ({
@@ -31,6 +32,7 @@ vi.mock("@/shared/utils/machineId", () => ({
 
 vi.mock("@/lib/auth/dashboardSession", () => ({
   verifyDashboardAuthToken: mocks.verifyDashboardAuthToken,
+  getDashboardAuthSession: mocks.getDashboardAuthSession,
 }));
 
 const { proxy, __test__ } = await import("../../src/dashboardGuard.js");
@@ -61,20 +63,34 @@ describe("dashboard guard public LLM API access", () => {
     expect(mocks.validateApiKey).not.toHaveBeenCalled();
   });
 
-  it("rejects remote Host-spoof when real peer IP is non-loopback", async () => {
+  it("rejects remote Host-spoof when real peer IP is non-loopback (via trusted proxy)", async () => {
     const response = await proxy(request("/v1/chat/completions", {
       host: "localhost",
       "x-9r-real-ip": "10.204.111.34",
+      "x-9r-via-proxy": "1",
     }));
 
     expect(response.status).toBe(401);
     expect(response.body.error).toBe("API key required for remote API access");
   });
 
-  it("allows loopback peer IP regardless of Host", async () => {
+  it("ignores spoofed bare x-9r-real-ip without x-9r-via-proxy (bare next start)", async () => {
+    // Under bare `next start` the header is client-supplied and untrusted. A spoofed
+    // loopback value must NOT grant local access; Host is the locality anchor instead.
+    const response = await proxy(request("/v1/chat/completions", {
+      host: "router.example.com",
+      "x-9r-real-ip": "127.0.0.1",
+    }));
+
+    expect(response.status).toBe(401);
+    expect(response.body.error).toBe("API key required for remote API access");
+  });
+
+  it("allows loopback peer IP regardless of Host (via trusted proxy)", async () => {
     const response = await proxy(request("/v1/chat/completions", {
       host: "localhost:20128",
       "x-9r-real-ip": "127.0.0.1",
+      "x-9r-via-proxy": "1",
     }));
 
     expect(response).toBe(mocks.nextResponse);
@@ -253,6 +269,33 @@ describe("dashboard guard local-only access", () => {
       host: "router.example.com",
       "x-9r-cli-token": "cli-token",
     }));
+
+    expect(response).toBe(mocks.nextResponse);
+  });
+});
+
+describe("dashboard guard force-password-change token", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getSettings.mockResolvedValue({ requireLogin: true });
+    mocks.verifyDashboardAuthToken.mockResolvedValue(true);
+  });
+
+  it("blocks all routes except allow-listed when force_password_change claim is set", async () => {
+    mocks.getDashboardAuthSession.mockReturnValue({ force_password_change: true });
+    const req = request("/api/providers", { host: "localhost:20128" });
+
+    const response = await proxy(req);
+
+    expect(response.status).toBe(403);
+    expect(response.body.forcePasswordChange).toBe(true);
+  });
+
+  it("allows the password-setting route with a force_password_change token", async () => {
+    mocks.getDashboardAuthSession.mockReturnValue({ force_password_change: true });
+    const req = request("/api/settings", { host: "localhost:20128" });
+
+    const response = await proxy(req);
 
     expect(response).toBe(mocks.nextResponse);
   });

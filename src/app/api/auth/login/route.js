@@ -20,7 +20,11 @@ function isTunnelRequest(request, settings) {
 export async function POST(request) {
   try {
     const ip = getClientIp(request);
-    const lock = checkLock(ip);
+    // Local admins must always be able to log in, even when the shared "unknown" remote bucket
+    // has been locked out by a remote attacker's failed attempts. (Locality uses the same
+    // via-proxy trust model as dashboardGuard, so it cannot be spoofed under bare `next start`.)
+    const isLocal = isLocalRequest(request);
+    const lock = isLocal ? { locked: false } : checkLock(ip);
     if (lock.locked) {
       return NextResponse.json(
         { error: `Too many failed attempts. Try again in ${lock.retryAfter}s. ${RESET_HINT}`, retryAfter: lock.retryAfter, resetHint: RESET_HINT },
@@ -55,14 +59,25 @@ export async function POST(request) {
     if (isValid) {
       recordSuccess(ip);
       const cookieStore = await cookies();
+
+      // Default password still in use from a non-local origin. We MUST NOT hand out a
+      // full-access JWT for the default password — that lets anyone who knows "123456"
+      // (publicly documented) fully control the dashboard and dump provider credentials.
+      // Instead issue a short-lived token that only authorizes setting a new password;
+      // dashboardGuard refuses all other routes while force_password_change is set.
+      const isDefaultPassword = !storedHash && !process.env.INITIAL_PASSWORD;
+      const mustChangePassword = isDefaultPassword && !isLocalRequest(request);
+
+      if (mustChangePassword) {
+        await setDashboardAuthCookie(cookieStore, request, { force_password_change: true });
+        return NextResponse.json(
+          { success: true, mustChangePassword: true },
+          { headers: NO_STORE_HEADERS }
+        );
+      }
+
       await setDashboardAuthCookie(cookieStore, request);
-
-      // Default password still in use on a remote client → force a password
-      // change before the dashboard is exposed remotely (keeps local UX intact).
-      const mustChangePassword =
-        !storedHash && !process.env.INITIAL_PASSWORD && !isLocalRequest(request);
-
-      return NextResponse.json({ success: true, mustChangePassword }, { headers: NO_STORE_HEADERS });
+      return NextResponse.json({ success: true, mustChangePassword: false }, { headers: NO_STORE_HEADERS });
     }
 
     const { remainingBeforeLock } = recordFail(ip);

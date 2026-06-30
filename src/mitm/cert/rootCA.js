@@ -81,12 +81,18 @@ async function generateRootCA() {
   // Self-sign the certificate
   cert.sign(keys.privateKey, forge.md.sha256.create());
 
-  // Save to disk
+  // Save to disk. The private key is the whole security boundary of the MITM CA: anyone who
+  // reads it can forge TLS certificates for any domain the OS trusts this CA for, so it MUST
+  // be owner-only readable (0600). Explicit mode is required because writeFileSync defaults to
+  // 0666 (minus umask), which on a multi-user host exposes the key to other accounts.
   const privateKeyPem = forge.pki.privateKeyToPem(keys.privateKey);
   const certPem = forge.pki.certificateToPem(cert);
 
-  fs.writeFileSync(ROOT_CA_KEY_PATH, privateKeyPem);
-  fs.writeFileSync(ROOT_CA_CERT_PATH, certPem);
+  fs.writeFileSync(ROOT_CA_KEY_PATH, privateKeyPem, { mode: 0o600 });
+  fs.writeFileSync(ROOT_CA_CERT_PATH, certPem, { mode: 0o644 });
+  // Best-effort tighten an existing key file that was created world-readable by an older
+  // version; chmod is a no-op if the file was just written with 0600.
+  try { fs.chmodSync(ROOT_CA_KEY_PATH, 0o600); } catch { /* ignore */ }
 
   console.log("✅ Root CA generated successfully");
   return { key: ROOT_CA_KEY_PATH, cert: ROOT_CA_CERT_PATH };

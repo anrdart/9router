@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 import initSqlJs from "sql.js";
 import { PRAGMA_SQL } from "../schema.js";
 
@@ -20,10 +21,17 @@ export async function createSqlJsAdapter(filePath) {
   let dirty = false;
   let saveTimer = null;
   const SAVE_DEBOUNCE_MS = 100;
+  // Persisting writes the entire serialized DB (sql.js has no incremental/WAL). To avoid a
+  // truncated/corrupt data.sqlite on crash/power-loss mid-write (which would make the DB
+  // unopenable and lose everything), write to a temp file in the SAME directory then atomically
+  // rename over the live file. rename is atomic on POSIX/Windows when source+dest share a
+  // filesystem, so a reader always sees either the old or the new complete file — never a tear.
+  const tmpPath = `${filePath}.${process.pid}.tmp`;
 
   function persist() {
     const data = db.export();
-    fs.writeFileSync(filePath, Buffer.from(data));
+    fs.writeFileSync(tmpPath, Buffer.from(data));
+    fs.renameSync(tmpPath, filePath);
     dirty = false;
   }
 
@@ -101,15 +109,33 @@ export async function createSqlJsAdapter(filePath) {
 
   function close() {
     if (saveTimer) clearTimeout(saveTimer);
-    if (dirty) persist();
+    saveTimer = null;
+    if (dirty) {
+      try { persist(); } catch (e) { console.error("[sqljs] flush on close failed:", e); }
+    }
     db.close();
   }
 
-  // Flush on shutdown
-  const flush = () => { if (dirty) try { persist(); } catch {} };
-  process.on("beforeExit", flush);
-  process.on("SIGINT", flush);
-  process.on("SIGTERM", flush);
+  // Flush on shutdown. Without this, the 100ms debounce window (and any write since the last
+  // persist) is lost when the process exits via process.exit(), an uncaught exception, or a
+  // hard container stop that never delivers beforeExit. Use `once` + process.exit(0) (matching
+  // the better-sqlite3/bun/node adapters) so a second signal during the synchronous persist()
+  // cannot re-enter flush and run a second db.export() concurrently.
+  let flushing = false;
+  const flush = (signal) => {
+    if (flushing) return; // re-entrancy guard for repeated signals
+    flushing = true;
+    if (dirty) {
+      try { persist(); } catch (e) { console.error("[sqljs] shutdown flush failed:", e); }
+    }
+    // For termination signals, exit cleanly so no handler runs twice and the process doesn't
+    // linger after the DB is safely persisted. beforeExit must NOT call exit (it's a lifecycle
+    // hook, not a termination signal).
+    if (signal && signal !== "beforeExit") process.exit(0);
+  };
+  process.on("beforeExit", () => flush("beforeExit"));
+  process.once("SIGINT", () => flush("SIGINT"));
+  process.once("SIGTERM", () => flush("SIGTERM"));
 
   return { driver: "sql.js", run, get, all, exec, transaction, close, raw: db };
 }

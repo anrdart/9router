@@ -20,16 +20,24 @@ import { toOpenAIFinish } from "../concerns/finishReason.js";
 export function ollamaToOpenAIResponse(chunk, state) {
   if (!chunk || typeof chunk !== "object") return null;
 
-  // Initialize state on first chunk
+  // Initialize state on first chunk. Ollama content deltas may omit the model field (only the
+  // final done:true chunk reliably carries it), so the model can come in undefined here; without
+  // a fallback every subsequent OpenAI chunk would carry model:undefined and downstream
+  // translators (openai→claude) would substitute a wrong generic fallback. Refresh the model on
+  // any chunk that actually carries it, and default to "ollama" otherwise.
   if (!state.ollama) {
     state.ollama = {
       id: `chatcmpl-${Date.now()}`,
       created: Math.floor(Date.now() / 1000),
-      model: chunk.model || state.model
+      model: chunk.model || state.model || "ollama"
     };
   }
+  if (chunk.model && !state.ollama.model) {
+    state.ollama.model = chunk.model;
+  }
 
-  const { id, created, model } = state.ollama;
+  const { id, created } = state.ollama;
+  const model = state.ollama.model;
 
   // Final chunk with done=true
   if (chunk.done) {

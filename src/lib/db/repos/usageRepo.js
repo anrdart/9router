@@ -22,6 +22,7 @@ if (!global._statsEmitter) {
   global._statsEmitter.setMaxListeners(50);
 }
 if (!global._pendingTimers) global._pendingTimers = {};
+if (!global._pendingTimerRefs) global._pendingTimerRefs = {};
 if (!global._recentRing) global._recentRing = { items: [], initialized: false };
 if (!global._connectionMapCache) global._connectionMapCache = { map: {}, ts: 0 };
 if (!global._statsEmitTimers) global._statsEmitTimers = { pending: null, update: null };
@@ -29,6 +30,7 @@ if (!global._statsEmitTimers) global._statsEmitTimers = { pending: null, update:
 const pendingRequests = global._pendingRequests;
 const lastErrorProvider = global._lastErrorProvider;
 const pendingTimers = global._pendingTimers;
+const pendingTimerRefs = global._pendingTimerRefs;
 const recentRing = global._recentRing;
 const connCache = global._connectionMapCache;
 const statsEmitTimers = global._statsEmitTimers;
@@ -189,9 +191,17 @@ export function trackPendingRequest(model, provider, connectionId, started, erro
   }
 
   if (started) {
+    // Multiple concurrent requests to the same account+model share one timerKey. Previously each
+    // START cleared+rearmed the timer, so a request that finished early wiped the safety timer
+    // for another still-in-flight request — if the latter's END then got lost, the pending
+    // counter stuck > 0 forever. Track how many requests are sharing the timer and only disarm
+    // it when the last one reports END (or the safety timeout fires).
+    if (!pendingTimerRefs[timerKey]) pendingTimerRefs[timerKey] = 0;
+    pendingTimerRefs[timerKey]++;
     clearTimeout(pendingTimers[timerKey]);
     pendingTimers[timerKey] = setTimeout(() => {
       delete pendingTimers[timerKey];
+      delete pendingTimerRefs[timerKey];
       if (pendingRequests.byModel[modelKey] > 0) pendingRequests.byModel[modelKey] = 0;
       if (connectionId && pendingRequests.byAccount[connectionId]?.[modelKey] > 0) {
         pendingRequests.byAccount[connectionId][modelKey] = 0;
@@ -199,8 +209,13 @@ export function trackPendingRequest(model, provider, connectionId, started, erro
       scheduleStatsEvent("pending");
     }, PENDING_TIMEOUT_MS);
   } else {
-    clearTimeout(pendingTimers[timerKey]);
-    delete pendingTimers[timerKey];
+    // Only disarm the shared timer when the LAST in-flight request for this key ends.
+    pendingTimerRefs[timerKey] = Math.max(0, (pendingTimerRefs[timerKey] || 1) - 1);
+    if (pendingTimerRefs[timerKey] === 0) {
+      clearTimeout(pendingTimers[timerKey]);
+      delete pendingTimers[timerKey];
+      delete pendingTimerRefs[timerKey];
+    }
   }
 
   if (!started && error && provider) {

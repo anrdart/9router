@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSettings, validateApiKey } from "@/lib/localDb";
 import { getConsistentMachineId } from "@/shared/utils/machineId";
-import { verifyDashboardAuthToken } from "@/lib/auth/dashboardSession";
+import { verifyDashboardAuthToken, getDashboardAuthSession } from "@/lib/auth/dashboardSession";
 
 const CLI_TOKEN_HEADER = "x-9r-cli-token";
 const CLI_TOKEN_SALT = "9r-cli-auth";
@@ -92,15 +92,23 @@ function isLoopbackHostname(h) {
 }
 
 export function isLocalRequest(request) {
-  // Stamped by custom-server.js when forwarding headers exist: request came through
-  // a reverse proxy, so the loopback socket is the proxy hop, not the end-user.
-  if (request.headers.get("x-9r-via-proxy")) return false;
-  // Trusted peer IP from TCP socket (custom-server.js); unspoofable. Primary anchor for "local".
+  // custom-server.js is the only component that should ever set x-9r-real-ip: it derives the
+  // peer IP from the unspoofable TCP socket (after deleting any client-supplied value) and
+  // stamps x-9r-via-proxy when the loopback socket is actually a reverse-proxy hop.
+  const viaProxy = request.headers.get("x-9r-via-proxy");
   const realIp = request.headers.get("x-9r-real-ip");
-  if (realIp) {
-    if (!isLoopbackHostname(realIp)) return false;
+
+  // Determine the authoritative origin IP. A bare x-9r-real-ip WITHOUT x-9r-via-proxy means
+  // custom-server did NOT run (bare `next start`): the header is client-supplied and untrusted
+  // — a remote attacker can send `x-9r-real-ip: 127.0.0.1` to spoof a loopback origin. In that
+  // case we fall back to the Host header instead of trusting it.
+  const authoritativeIp = viaProxy ? realIp : null;
+
+  if (authoritativeIp) {
+    if (!isLoopbackHostname(authoritativeIp)) return false;
   } else if (!isLoopbackHostname(request.headers.get("host"))) {
-    // Fallback for bare server.js (dev) without custom-server: legacy Host-based check.
+    // Either custom-server local-direct (no proxy headers) or bare next start (untrusted
+    // x-9r-real-ip ignored). Locality is decided by the Host header in both cases.
     return false;
   }
   const origin = request.headers.get("origin");
@@ -150,6 +158,19 @@ async function hasValidToken(request) {
   return await verifyDashboardAuthToken(token);
 }
 
+// A force-password-change token (issued on remote login with the default password)
+// only authorizes setting a new password — nothing else. While it is active every
+// other protected route is refused so a leaked/known default password cannot unlock
+// the dashboard and its stored credentials.
+const FORCE_PASSWORD_CHANGE_ALLOWED = new Set(["/api/settings", "/api/auth/status", "/api/auth/logout"]);
+function isForcePasswordChangeToken(request) {
+  const token = request.cookies.get("auth_token")?.value;
+  // verifyDashboardAuthToken already validated signature+exp in isAuthenticated(); here we
+  // only inspect the (already-trusted) payload for the claim. If the token is absent/invalid
+  // this simply returns false and normal auth flow applies.
+  return getDashboardAuthSession(token)?.force_password_change === true || false;
+}
+
 // Read settings directly from DB to avoid self-fetch deadlock in proxy
 async function loadSettings() {
   try {
@@ -171,6 +192,34 @@ function isPublicApi(pathname) {
   return PUBLIC_API_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
+// CSRF defense-in-depth for state-changing /api/* routes. SameSite=Lax cookies block cross-site
+// POSTs in most cases, but when requireLogin is disabled the auth gate is open to any cross-origin
+// request. Verifying Origin/Referer matches the request host closes that gap. Browsers always send
+// Origin on cross-site fetch/form POST; a missing Origin on a non-GET is treated as suspicious.
+const STATE_CHANGING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+function isSameOriginStateChange(request) {
+  const method = (request.method || "GET").toUpperCase();
+  if (!STATE_CHANGING_METHODS.has(method)) return true; // only enforce on mutations
+  const { pathname } = request.nextUrl;
+  if (isPublicApi(pathname)) return true; // login/logout/health etc. are exempt
+  const host = (request.headers.get("host") || "").toLowerCase();
+  if (!host) return true; // can't determine → don't block legitimate tooling
+  const originRaw = request.headers.get("origin");
+  const refererRaw = request.headers.get("referer");
+  const candidates = [originRaw, refererRaw].filter(Boolean);
+  // No Origin/Referer on a mutation request from a browser is abnormal; but some CLI/SDK clients
+  // legitimately omit them. Same-origin can't be confirmed, so we DO NOT block here to preserve
+  // compatibility — the auth gate (JWT/CLI token/apiKey) remains the primary control.
+  if (candidates.length === 0) return true;
+  for (const candidate of candidates) {
+    try {
+      const candidateHost = new URL(candidate).host.toLowerCase();
+      if (candidateHost === host) return true; // at least one matches → same-origin
+    } catch { /* malformed → treat as cross-origin */ }
+  }
+  return false; // all present candidates differ from host → cross-origin mutation
+}
+
 export const __test__ = {
   isLocalRequest,
   isPublicLlmApi,
@@ -181,6 +230,23 @@ export const __test__ = {
 
 export async function proxy(request) {
   const { pathname } = request.nextUrl;
+
+  // CSRF defense-in-depth: reject cross-origin state-changing requests to /api/* that carry no
+  // same-origin Origin/Referer. SameSite=Lax handles the common case; this closes the gap when
+  // requireLogin is off and a malicious page drives a mutation through the admin's browser.
+  if (pathname.startsWith("/api/") && !isSameOriginStateChange(request)) {
+    return NextResponse.json({ error: "Cross-origin request blocked" }, { status: 403 });
+  }
+
+  // A force-password-change session (remote login with the default password) is locked to
+  // the password-setting routes only. Enforce this BEFORE any other allow rule so the token
+  // can never reach provider/credential/database routes while the default is still in place.
+  if (isForcePasswordChangeToken(request)) {
+    if (!FORCE_PASSWORD_CHANGE_ALLOWED.has(pathname)) {
+      return NextResponse.json({ error: "Password change required", forcePasswordChange: true }, { status: 403 });
+    }
+    return NextResponse.next();
+  }
 
   // Local-only gate for spawn-capable / host-secret routes.
   if (LOCAL_ONLY_PATHS.some((p) => pathname.startsWith(p))) {

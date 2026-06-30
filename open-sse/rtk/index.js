@@ -4,6 +4,31 @@ import { RAW_CAP, MIN_COMPRESS_SIZE } from "./constants.js";
 import { autoDetectFilter } from "./autodetect.js";
 import { safeApply } from "./applyFilter.js";
 
+// Heuristic: does this tool output look like an error/stack trace the model must read verbatim?
+// OpenAI/Responses tool messages carry no is_error flag, so without this guard RTK would truncate
+// a failed command's diagnostic the same way it trims a large-but-disposable success payload,
+// and the model would lose exactly the context it needs to recover. The patterns are deliberately
+// conservative (anchored tokens common across languages) to avoid skipping ordinary output.
+const ERROR_TRACE_PATTERNS = [
+  /\bTraceback \(most recent call last\)/,           // Python
+  /^\s*at .+\(.+:\d+:\d+\)/m,                         // JS/Node stack frame
+  /\bError:\s.+/m,                                    // <Lang>Error: message
+  /\bException\b.*\b(at line|:\d)/,                   // Java/C# style
+  /\b(FATAL|PANIC|SEGFAULT)\b/,                       // crash markers
+  /Command failed with exit code \d+/,               // shell/exec failure
+  /\bstack trace\b/i,
+];
+export function looksLikeErrorTrace(text) {
+  if (typeof text !== "string" || text.length === 0) return false;
+  // Cheap pre-filter: most error traces are short-ish and contain these tokens. Only run the
+  // regex set when one of the high-signal tokens is present, to keep this O(n) check cheap.
+  if (!/(error|exception|traceback|trace|fatal|panic|failed)/i.test(text)) return false;
+  for (const re of ERROR_TRACE_PATTERNS) {
+    if (re.test(text)) return true;
+  }
+  return false;
+}
+
 // Compress tool_result content in-place. Returns stats or null if disabled/failed.
 export function compressMessages(body, enabled) {
   if (!enabled) return null;
@@ -29,12 +54,20 @@ export function compressMessages(body, enabled) {
       // Shape 4: OpenAI Responses — top-level { type:"function_call_output", output: string | [{type:"input_text", text}] }
       if (msg.type === "function_call_output") {
         if (typeof msg.output === "string") {
-          msg.output = compressText(msg.output, stats, "openai-responses-string");
+          // OpenAI tool outputs carry no is_error flag, so a failed-tool's diagnostic output
+          // (which the model must read verbatim to decide how to retry) would be truncated the
+          // same as a successful large result. Skip compression when the output looks like an
+          // error/stack trace — mirrors the is_error guard the Claude/Kiro paths already apply.
+          if (!looksLikeErrorTrace(msg.output)) {
+            msg.output = compressText(msg.output, stats, "openai-responses-string");
+          }
         } else if (Array.isArray(msg.output)) {
           for (let k = 0; k < msg.output.length; k++) {
             const part = msg.output[k];
             if (part && part.type === "input_text" && typeof part.text === "string") {
-              part.text = compressText(part.text, stats, "openai-responses-array");
+              if (!looksLikeErrorTrace(part.text)) {
+                part.text = compressText(part.text, stats, "openai-responses-array");
+              }
             }
           }
         }
@@ -43,7 +76,9 @@ export function compressMessages(body, enabled) {
 
       // Shape 1: OpenAI tool message — { role:"tool", content: "string" }
       if (msg.role === "tool" && typeof msg.content === "string") {
-        msg.content = compressText(msg.content, stats, "openai-tool");
+        if (!looksLikeErrorTrace(msg.content)) {
+          msg.content = compressText(msg.content, stats, "openai-tool");
+        }
         continue;
       }
 
@@ -54,7 +89,9 @@ export function compressMessages(body, enabled) {
         for (let k = 0; k < msg.content.length; k++) {
           const part = msg.content[k];
           if (part && part.type === "text" && typeof part.text === "string") {
-            part.text = compressText(part.text, stats, "openai-tool-array");
+            if (!looksLikeErrorTrace(part.text)) {
+              part.text = compressText(part.text, stats, "openai-tool-array");
+            }
           }
         }
         continue;

@@ -28,6 +28,14 @@ export function checkFallbackError(status, errorText, backoffLevel = 0) {
   for (const rule of ERROR_RULES) {
     // Text-based rule: match substring in error message
     if (rule.text && lowerError && lowerError.includes(rule.text)) {
+      // Some text patterns are only meaningful as rate-limit signals when the status is itself a
+      // capacity/rate-limit status. "capacity"/"overloaded" appear in deterministic 400s like
+      // "context capacity exceeded", which must NOT trigger rate-limit backoff. restrictToStatuses
+      // narrows the match so the rule only fires for the listed statuses (others skip it).
+      if (rule.restrictToStatuses && !rule.restrictToStatuses.includes(status)) continue;
+      if (rule.shouldFallback === false) {
+        return { shouldFallback: false, cooldownMs: 0 };
+      }
       if (rule.backoff) {
         const newLevel = Math.min(backoffLevel + 1, BACKOFF_CONFIG.maxLevel);
         return { shouldFallback: true, cooldownMs: getQuotaCooldown(newLevel), newBackoffLevel: newLevel };
@@ -37,6 +45,9 @@ export function checkFallbackError(status, errorText, backoffLevel = 0) {
 
     // Status-based rule: match HTTP status code
     if (rule.status && rule.status === status) {
+      if (rule.shouldFallback === false) {
+        return { shouldFallback: false, cooldownMs: 0 };
+      }
       if (rule.backoff) {
         const newLevel = Math.min(backoffLevel + 1, BACKOFF_CONFIG.maxLevel);
         return { shouldFallback: true, cooldownMs: getQuotaCooldown(newLevel), newBackoffLevel: newLevel };
@@ -45,7 +56,9 @@ export function checkFallbackError(status, errorText, backoffLevel = 0) {
     }
   }
 
-  // Default: transient cooldown for any unmatched error
+  // Default: transient cooldown for any unmatched error (covers 5xx and unknown statuses that
+  // may be transient provider hiccups). Deterministic 4xx client errors are matched explicitly
+  // above and fail fast without locking the pool.
   return { shouldFallback: true, cooldownMs: TRANSIENT_COOLDOWN_MS };
 }
 

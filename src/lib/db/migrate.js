@@ -76,6 +76,19 @@ function runVersionedMigrations(adapter) {
 }
 
 // ─── Auto-sync (additive only): add missing tables/columns/indexes ───────
+// Supply a DEFAULT for an ALTER TABLE ADD COLUMN that declares NOT NULL but no DEFAULT.
+// SQLite rejects "ADD COLUMN x TEXT NOT NULL" (no default → every existing row would violate
+// NOT NULL). Picking a type-appropriate sentinel lets the column be added; new rows must still
+// satisfy NOT NULL. PRIMARY KEY/UNIQUE are assumed already stripped by the caller.
+function withAddColumnDefault(colDef) {
+  if (!/NOT\s+NULL/i.test(colDef) || /\bDEFAULT\b/i.test(colDef)) return colDef;
+  if (/INTEGER|INT\b/i.test(colDef)) return `${colDef} DEFAULT 0`;
+  if (/REAL|FLOAT|DOUBLE|NUMERIC|DECIMAL/i.test(colDef)) return `${colDef} DEFAULT 0`;
+  // TEXT and anything else → empty string (SQLite has no boolean type; booleans are INTEGER 0/1)
+  if (/\bBOOLEAN\b/i.test(colDef)) return `${colDef} DEFAULT 0`;
+  return `${colDef} DEFAULT ''`;
+}
+
 function syncSchemaFromTables(adapter) {
   for (const [tableName, def] of Object.entries(TABLES)) {
     // Create table if absent
@@ -86,14 +99,19 @@ function syncSchemaFromTables(adapter) {
     const existingNames = new Set(existing.map((r) => r.name));
     for (const [colName, colDef] of Object.entries(def.columns)) {
       if (!existingNames.has(colName)) {
-        // SQLite ADD COLUMN restrictions: no PRIMARY KEY / UNIQUE w/o NULL ok.
-        // We strip PRIMARY KEY / UNIQUE since those are only valid at create time.
+        // SQLite ADD COLUMN restrictions: no PRIMARY KEY / UNIQUE (only valid at create time),
+        // and NOT NULL is rejected unless a DEFAULT is supplied. Previously NOT NULL was left in
+        // and the ALTER threw ("Cannot add a NOT NULL column with default value NULL") — the
+        // error was only console.warn'd, the column was never added, and every subsequent
+        // INSERT/SELECT against that table then failed with "no such column". Strip the
+        // create-only constraints and supply a matching DEFAULT so NOT NULL columns can be added.
         const safeDef = colDef
           .replace(/PRIMARY KEY( AUTOINCREMENT)?/i, "")
           .replace(/UNIQUE/i, "")
           .trim();
+        const finalDef = withAddColumnDefault(safeDef);
         try {
-          adapter.exec(`ALTER TABLE ${tableName} ADD COLUMN ${colName} ${safeDef}`);
+          adapter.exec(`ALTER TABLE ${tableName} ADD COLUMN ${colName} ${finalDef}`);
           console.log(`[DB][sync] +column ${tableName}.${colName}`);
         } catch (e) {
           console.warn(`[DB][sync] add column ${tableName}.${colName} failed: ${e.message}`);
@@ -101,9 +119,11 @@ function syncSchemaFromTables(adapter) {
       }
     }
 
-    // Indexes (idempotent)
+    // Indexes (idempotent) — surface failures instead of swallowing them silently, so a broken
+    // index declaration isn't invisible (it previously hid inside an empty catch {}).
     for (const idx of def.indexes || []) {
-      try { adapter.exec(idx); } catch {}
+      try { adapter.exec(idx); }
+      catch (e) { console.warn(`[DB][sync] index creation failed (${e.message}): ${idx}`); }
     }
   }
 }

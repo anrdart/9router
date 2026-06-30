@@ -64,8 +64,19 @@ export const ERROR_RULES = [
   { text: "rate limit",               backoff: true },
   { text: "too many requests",        backoff: true },
   { text: "quota exceeded",           backoff: true },
-  { text: "capacity",                 backoff: true },
-  { text: "overloaded",               backoff: true },
+  // "capacity"/"overloaded" are rate-limit signals ONLY on capacity/rate-limit statuses. The bare
+  // substrings otherwise false-match deterministic 400s like "context capacity exceeded" (input
+  // too long) or "model has insufficient capacity for tools", wrongly escalating backoff on a
+  // request that will never succeed until the client shrinks it. restrictToStatuses scopes them.
+  { text: "capacity",   backoff: true, restrictToStatuses: [429, 502, 503, 504, 529] },
+  { text: "overloaded", backoff: true, restrictToStatuses: [429, 502, 503, 504, 529] },
+
+  // --- Deterministic client errors: do NOT fall back and do NOT lock the account.
+  // A 400/422 means the REQUEST itself is malformed or unsupported (bad param, oversized
+  // context, tool-schema error). Retrying the identical request against every other account
+  // cannot fix it and would burn + 30s-lock the whole pool on a single bad client request.
+  { status: 400, shouldFallback: false, cooldownMs: 0 },
+  { status: 422, shouldFallback: false, cooldownMs: 0 },
 
   // --- Status-based rules (fallback when text doesn't match) ---
   { status: 401, cooldownMs: COOLDOWN.long },

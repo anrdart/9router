@@ -96,6 +96,26 @@ function ensureRuntimeServer(bundledPath) {
 const SERVER_PATH = ensureRuntimeServer(resolveBundledServerPath());
 const ENCRYPT_ALGO = "aes-256-gcm";
 const ENCRYPT_SALT = "9router-mitm-pwd";
+// Path to a high-entropy secret persisted alongside the DB. Deriving the AES key from
+// machineId alone is weak: machineId is a non-secret OS value (also stored in plaintext at
+// ~/.9router/machine-id), so any local user / backup leak could recover the sudo password.
+// Mixing in this random secret (generated once, mode 0600) makes the key unpredictable even
+// if machineId is known. Kept in DATA_DIR like jwt-secret / cli-secret.
+const MITM_SECRET_FILE = path.join(DATA_DIR, "mitm-secret");
+let cachedMitmSecret = null;
+function loadMitmSecret() {
+  if (cachedMitmSecret) return cachedMitmSecret;
+  try {
+    cachedMitmSecret = fs.readFileSync(MITM_SECRET_FILE, "utf8").trim();
+    if (cachedMitmSecret) return cachedMitmSecret;
+  } catch { /* generate below */ }
+  cachedMitmSecret = crypto.randomBytes(32).toString("hex");
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(MITM_SECRET_FILE, cachedMitmSecret, { mode: 0o600 });
+  } catch { /* best-effort; key derivation still mixes machineId */ }
+  return cachedMitmSecret;
+}
 
 function getProcessUsingPort443() {
   try {
@@ -151,7 +171,26 @@ function killProcess(pid, force = false, sudoPassword = null) {
   }
 }
 
+// Current key: mixes machineId (host binding) + a persisted random secret (unpredictability)
+// + salt. The random secret is the critical addition — without it the key was derivable from
+// public machineId alone.
 function deriveKey() {
+  const secret = loadMitmSecret();
+  const machinePart = (() => {
+    try {
+      const { machineIdSync } = require("node-machine-id");
+      return machineIdSync();
+    } catch {
+      return "";
+    }
+  })();
+  return crypto.createHash("sha256").update(machinePart + ENCRYPT_SALT + secret).digest();
+}
+
+// Legacy key (machineId + salt only) kept solely to decrypt sudo passwords stored by older
+// versions before the secret-mix was added. Once a password is re-encrypted with deriveKey()
+// this is no longer needed, but it must remain for one-time backward-compatible reads.
+function deriveLegacyKey() {
   try {
     const { machineIdSync } = require("node-machine-id");
     const raw = machineIdSync();
@@ -174,10 +213,18 @@ function decryptPassword(stored) {
   try {
     const [ivHex, tagHex, dataHex] = stored.split(":");
     if (!ivHex || !tagHex || !dataHex) return null;
-    const key = deriveKey();
-    const decipher = crypto.createDecipheriv(ENCRYPT_ALGO, key, Buffer.from(ivHex, "hex"));
-    decipher.setAuthTag(Buffer.from(tagHex, "hex"));
-    return decipher.update(Buffer.from(dataHex, "hex")) + decipher.final("utf8");
+    // Try the current (strong) key first; fall back to the legacy key so sudo passwords
+    // encrypted by an older version remain readable until they are re-saved.
+    for (const key of [deriveKey(), deriveLegacyKey()]) {
+      try {
+        const decipher = crypto.createDecipheriv(ENCRYPT_ALGO, key, Buffer.from(ivHex, "hex"));
+        decipher.setAuthTag(Buffer.from(tagHex, "hex"));
+        return decipher.update(Buffer.from(dataHex, "hex")) + decipher.final("utf8");
+      } catch {
+        // wrong key (GCM auth tag mismatch) → try next
+      }
+    }
+    return null;
   } catch {
     return null;
   }

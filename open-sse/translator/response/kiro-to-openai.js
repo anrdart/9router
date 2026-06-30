@@ -68,6 +68,7 @@ export function kiroToOpenAIResponse(chunk, state) {
     state.responseId = `chatcmpl-${Date.now()}`;
     state.created = Math.floor(Date.now() / 1000);
     state.chunkIndex = 0;
+    state.toolCallIndex = 0; // monotonic index so multiple tool calls get distinct OpenAI indices
   }
 
   const eventType = data._eventType || data.event || "";
@@ -112,10 +113,15 @@ export function kiroToOpenAIResponse(chunk, state) {
     const toolName = toolUse.name || "";
     const toolInput = toolUse.input || {};
 
+    // Distinct, increasing index per tool call. A hard-coded index:0 collided every tool call in
+    // a multi-tool turn, which downstream translators (openai-to-claude) key on by index — so the
+    // 2nd+ tool's arguments were concatenated onto the 1st tool's buffer and later tools vanished.
+    const toolCallIndex = state.toolCallIndex++;
+
     const openaiChunk = buildChunk(chunkMeta(state), {
       ...(state.chunkIndex === 0 ? { role: ROLE.ASSISTANT } : {}),
       tool_calls: [{
-        index: 0,
+        index: toolCallIndex,
         id: toolCallId,
         type: OPENAI_BLOCK.FUNCTION,
         function: {

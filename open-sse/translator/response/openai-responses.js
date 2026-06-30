@@ -121,19 +121,24 @@ export function openaiToOpenAIResponsesResponse(chunk, state) {
 // Helper functions
 function startReasoning(state, emit, idx) {
   if (!state.reasoningId) {
+    // Reasoning, message and function-call items must each occupy a UNIQUE output_index in the
+    // Responses stream. Previously all three derived their index from the Chat choice index (=0
+    // for a single-choice stream), so reasoning/text/tool collided on output_index 0 and
+    // downstream SDKs overwrote each other. Allocate a fresh monotonic index per opened item.
+    const outputIndex = state.outputIndex++;
     state.reasoningId = `rs_${state.responseId}_${idx}`;
-    state.reasoningIndex = idx;
-    
+    state.reasoningIndex = outputIndex;
+
     emit("response.output_item.added", {
       type: "response.output_item.added",
-      output_index: idx,
+      output_index: outputIndex,
       item: { id: state.reasoningId, type: RESPONSES_ITEM.REASONING, summary: [] }
     });
 
     emit("response.reasoning_summary_part.added", {
       type: "response.reasoning_summary_part.added",
       item_id: state.reasoningId,
-      output_index: idx,
+      output_index: outputIndex,
       summary_index: 0,
       part: { type: RESPONSES_ITEM.SUMMARY_TEXT, text: "" }
     });
@@ -156,7 +161,7 @@ function emitReasoningDelta(state, emit, text) {
 function closeReasoning(state, emit) {
   if (state.reasoningId && !state.reasoningDone) {
     state.reasoningDone = true;
-    
+
     emit("response.reasoning_summary_text.done", {
       type: "response.reasoning_summary_text.done",
       item_id: state.reasoningId,
@@ -182,28 +187,40 @@ function closeReasoning(state, emit) {
         summary: [{ type: RESPONSES_ITEM.SUMMARY_TEXT, text: state.reasoningBuf }]
       }
     });
+
+    // Reset reasoning state so a SECOND <think> block in the same turn opens its own reasoning
+    // item instead of being silently grafted onto the already-closed one (which produced a
+    // dangling, never-finalized reasoning item). The output_index counter keeps advancing, so the
+    // new reasoning item gets the next index.
+    state.reasoningId = "";
+    state.reasoningIndex = -1;
+    state.reasoningBuf = "";
+    state.reasoningDone = false;
+    state.reasoningPartAdded = false;
   }
 }
 
 function emitTextContent(state, emit, idx, content) {
   if (!state.msgItemAdded[idx]) {
     state.msgItemAdded[idx] = true;
-    const msgId = `msg_${state.responseId}_${idx}`;
-    
+    // Allocate a unique monotonic output_index for the message item (see startReasoning note).
+    state.msgOutputIndex = state.outputIndex++;
+    state.msgId = `msg_${state.responseId}_${state.msgOutputIndex}`;
+
     emit("response.output_item.added", {
       type: "response.output_item.added",
-      output_index: idx,
-      item: { id: msgId, type: RESPONSES_ITEM.MESSAGE, content: [], role: ROLE.ASSISTANT }
+      output_index: state.msgOutputIndex,
+      item: { id: state.msgId, type: RESPONSES_ITEM.MESSAGE, content: [], role: ROLE.ASSISTANT }
     });
   }
 
   if (!state.msgContentAdded[idx]) {
     state.msgContentAdded[idx] = true;
-    
+
     emit("response.content_part.added", {
       type: "response.content_part.added",
-      item_id: `msg_${state.responseId}_${idx}`,
-      output_index: idx,
+      item_id: state.msgId,
+      output_index: state.msgOutputIndex,
       content_index: 0,
       part: { type: RESPONSES_ITEM.OUTPUT_TEXT, annotations: [], logprobs: [], text: "" }
     });
@@ -211,8 +228,8 @@ function emitTextContent(state, emit, idx, content) {
 
   emit("response.output_text.delta", {
     type: "response.output_text.delta",
-    item_id: `msg_${state.responseId}_${idx}`,
-    output_index: idx,
+    item_id: state.msgId,
+    output_index: state.msgOutputIndex,
     content_index: 0,
     delta: content,
     logprobs: []
@@ -226,12 +243,13 @@ function closeMessage(state, emit, idx) {
   if (state.msgItemAdded[idx] && !state.msgItemDone[idx]) {
     state.msgItemDone[idx] = true;
     const fullText = state.msgTextBuf[idx] || "";
-    const msgId = `msg_${state.responseId}_${idx}`;
+    const msgId = state.msgId || `msg_${state.responseId}_${idx}`;
+    const outputIndex = state.msgOutputIndex ?? parseInt(idx);
 
     emit("response.output_text.done", {
       type: "response.output_text.done",
       item_id: msgId,
-      output_index: parseInt(idx),
+      output_index: outputIndex,
       content_index: 0,
       text: fullText,
       logprobs: []
@@ -240,14 +258,14 @@ function closeMessage(state, emit, idx) {
     emit("response.content_part.done", {
       type: "response.content_part.done",
       item_id: msgId,
-      output_index: parseInt(idx),
+      output_index: outputIndex,
       content_index: 0,
       part: { type: RESPONSES_ITEM.OUTPUT_TEXT, annotations: [], logprobs: [], text: fullText }
     });
 
     emit("response.output_item.done", {
       type: "response.output_item.done",
-      output_index: parseInt(idx),
+      output_index: outputIndex,
       item: {
         id: msgId,
         type: RESPONSES_ITEM.MESSAGE,
@@ -267,10 +285,12 @@ function emitToolCall(state, emit, tc) {
 
   if (!state.funcCallIds[tcIdx] && newCallId) {
     state.funcCallIds[tcIdx] = newCallId;
-    
+    // Allocate a unique monotonic output_index for this function-call item (see startReasoning).
+    if (state.funcOutputIndex[tcIdx] === undefined) state.funcOutputIndex[tcIdx] = state.outputIndex++;
+
     emit("response.output_item.added", {
       type: "response.output_item.added",
-      output_index: tcIdx,
+      output_index: state.funcOutputIndex[tcIdx],
       item: {
         id: `fc_${newCallId}`,
         type: RESPONSES_ITEM.FUNCTION_CALL,
@@ -289,7 +309,7 @@ function emitToolCall(state, emit, tc) {
       emit("response.function_call_arguments.delta", {
         type: "response.function_call_arguments.delta",
         item_id: `fc_${refCallId}`,
-        output_index: tcIdx,
+        output_index: state.funcOutputIndex[tcIdx] ?? tcIdx,
         delta: tc.function.arguments
       });
     }
@@ -301,17 +321,18 @@ function closeToolCall(state, emit, idx) {
   const callId = state.funcCallIds[idx];
   if (callId && !state.funcItemDone[idx]) {
     const args = state.funcArgsBuf[idx] || "{}";
-    
+    const outputIndex = state.funcOutputIndex[idx] ?? parseInt(idx);
+
     emit("response.function_call_arguments.done", {
       type: "response.function_call_arguments.done",
       item_id: `fc_${callId}`,
-      output_index: parseInt(idx),
+      output_index: outputIndex,
       arguments: args
     });
 
     emit("response.output_item.done", {
       type: "response.output_item.done",
-      output_index: parseInt(idx),
+      output_index: outputIndex,
       item: {
         id: `fc_${callId}`,
         type: RESPONSES_ITEM.FUNCTION_CALL,

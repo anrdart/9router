@@ -25,7 +25,7 @@ export default function APIPageClient({ machineId }) {
   const [createdKey, setCreatedKey] = useState(null);
   const [confirmState, setConfirmState] = useState(null);
 
-  const [requireApiKey, setRequireApiKey] = useState(false);
+  const [requireApiKey, setRequireApiKey] = useState(true);
   const [requireLogin, setRequireLogin] = useState(true);
   const [hasPassword, setHasPassword] = useState(true);
  const [tunnelDashboardAccess, setTunnelDashboardAccess] = useState(false);
@@ -200,7 +200,7 @@ export default function APIPageClient({ machineId }) {
       ]);
       if (settingsRes.ok) {
         const data = await settingsRes.json();
-        setRequireApiKey(data.requireApiKey || false);
+        setRequireApiKey(data.requireApiKey !== false);
         setRequireLogin(data.requireLogin !== false);
         setHasPassword(data.hasPassword || false);
         setTunnelDashboardAccess(data.tunnelDashboardAccess || false);

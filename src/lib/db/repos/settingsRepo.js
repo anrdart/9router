@@ -17,6 +17,10 @@ const DEFAULT_SETTINGS = {
   comboStickyRoundRobinLimit: 1,
   comboStrategies: {},
   requireLogin: true,
+  // Fail-closed: LLM endpoints require an API key unless explicitly disabled.
+  // Without this default, a stock install bound beyond loopback exposes the
+  // LLM API (and thus the operator's provider credentials) unauthenticated.
+  requireApiKey: true,
   tunnelDashboardAccess: true,
   authMode: "password",
   oidcIssuerUrl: "",

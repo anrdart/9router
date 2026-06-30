@@ -7,6 +7,7 @@ import { resolveSessionId } from "../utils/sessionManager.js";
 import { proxyAwareFetch } from "../utils/proxyFetch.js";
 import { cleanJSONSchemaForAntigravity } from "../translator/formats/gemini.js";
 import { DEFAULT_THINKING_AG_SIGNATURE } from "../config/defaultThinkingSignature.js";
+import { getRequestContext, setRequestContext } from "./requestContext.js";
 
 // Sanitize function name: Gemini requires [a-zA-Z_][a-zA-Z0-9_.:\-]{0,63}
 function sanitizeFunctionName(name) {
@@ -102,9 +103,9 @@ export class AntigravityExecutor extends BaseExecutor {
   }
 
   // sessionId comes from transformRequest output; base.execute runs transformRequest before
-  // buildHeaders, so we read it from instance state cached there (fallback: explicit arg).
+  // buildHeaders, so we read it from the per-request context cached there (fallback: explicit arg).
   buildHeaders(credentials, stream = true, sessionId = null) {
-    const sid = sessionId || this._lastSessionId;
+    const sid = sessionId || getRequestContext().lastSessionId;
     return {
       "Content-Type": "application/json",
       "Authorization": `Bearer ${credentials.accessToken}`,
@@ -240,7 +241,9 @@ export class AntigravityExecutor extends BaseExecutor {
     // Strip blacklisted thinking fields from top-level body (set by thinkingUnified.js at root, not body.request)
     stripBlacklisted(body);
 
-    this._lastSessionId = transformedRequest.sessionId; // cached for buildHeaders (base.execute order)
+    // Cache sessionId in the per-request context (not on `this`) so concurrent requests to this
+    // singleton executor can't overwrite each other's session id before buildHeaders reads it.
+    setRequestContext({ lastSessionId: transformedRequest.sessionId });
 
     return {
       ...body,
