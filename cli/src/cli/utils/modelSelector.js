@@ -5,13 +5,13 @@ const { clearScreen } = require("./display");
 // Provider alias order: OAuth first, then API Key (matches ModelSelectModal)
 const PROVIDER_ALIAS_ORDER = [
   "cc", "ag", "cx", "if", "qw", "gc", "gh", "kr",
-  "openrouter", "glm", "kimi", "minimax", "openai", "anthropic", "gemini"
+  "openrouter", "glm", "kimi", "minimax", "openai", "anthropic", "gemini", "agentrouter"
 ];
 
 // Alias to display name mapping
 const PROVIDER_ALIAS_NAMES = {
   cc: "Claude Code",
-  ag: "Antigravity", 
+  ag: "Antigravity",
   cx: "OpenAI Codex",
   if: "iFlow AI",
   qw: "Qwen Code",
@@ -24,7 +24,8 @@ const PROVIDER_ALIAS_NAMES = {
   minimax: "Minimax Coding",
   openai: "OpenAI",
   anthropic: "Anthropic",
-  gemini: "Gemini"
+  gemini: "Gemini",
+  agentrouter: "AgentRouter"
 };
 
 /**

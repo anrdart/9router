@@ -112,6 +112,16 @@ const PROVIDER_MODELS = {
   minimax: [
     { id: "MiniMax-M2.1" },
   ],
+  agentrouter: [
+    { id: "claude-sonnet-4-5-20250929" },
+    { id: "claude-opus-4-5-20250929" },
+    { id: "claude-haiku-4-5-20251001" },
+    { id: "gpt-4o" },
+    { id: "glm-4.6" },
+    { id: "glm-4.5-air" },
+    { id: "deepseek-r1" },
+    { id: "qwen3-coder-480b" },
+  ],
 };
 
 // Provider definitions
@@ -134,6 +144,7 @@ const APIKEY_PROVIDERS = {
   openai: { id: "openai", name: "OpenAI" },
   anthropic: { id: "anthropic", name: "Anthropic" },
   gemini: { id: "gemini", name: "Gemini" },
+  agentrouter: { id: "agentrouter", name: "AgentRouter" },
 };
 
 const ALL_PROVIDERS = { ...OAUTH_PROVIDERS, ...APIKEY_PROVIDERS };
