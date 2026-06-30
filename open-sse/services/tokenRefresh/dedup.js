@@ -1,9 +1,29 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+
 const REFRESH_RESULT_TTL_MS = 10_000;
 const refreshDedupCache = new Map();
 
-export async function dedupRefresh(provider, oldToken, fn, log) {
+// Per-call AsyncLocalStorage carrying the connectionId of the credential being refreshed.
+// Two distinct connections can legitimately share a refresh-token value (e.g. the same OAuth token
+// imported into two connection records), and providers that ROTATE refresh tokens (codex, claude,
+// github) return a new token persisted to one connection while the other's later refresh uses its
+// stale oldToken. The old `provider:oldToken` dedup key collapsed both connections into one cache
+// entry, handing one connection's rotated result to the other — desyncing their refresh tokens or
+// failing with refresh_token_reused. Scoping the key per connection (via this store, set by
+// refreshProviderCredentials which always has the full credentials) prevents that cross-connection
+// bleed while still deduping concurrent refreshes for the SAME connection.
+const refreshCtx = new AsyncLocalStorage();
+
+export function runRefreshContext(connectionId, fn) {
+  return refreshCtx.run({ connectionId }, fn);
+}
+
+export async function dedupRefresh(provider, oldToken, fn, log, connectionId = null) {
   if (!oldToken) return fn();
-  const key = `${provider}:${oldToken}`;
+  // Prefer an explicit connectionId arg; fall back to the ambient one set by
+  // refreshProviderCredentials. Both keep the dedup key scoped per connection.
+  const connId = connectionId || refreshCtx.getStore()?.connectionId || null;
+  const key = connId ? `${provider}:${connId}:${oldToken}` : `${provider}:${oldToken}`;
   const hit = refreshDedupCache.get(key);
   if (hit) {
     if (hit.promise) {

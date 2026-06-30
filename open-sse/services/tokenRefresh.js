@@ -1,5 +1,6 @@
 import { PROVIDERS } from "../config/providers.js";
 import { OAUTH_ENDPOINTS, REFRESH_LEAD_MS } from "../config/appConstants.js";
+import { runRefreshContext } from "./tokenRefresh/dedup.js";
 import {
   refreshXaiToken,
   refreshAccessToken,
@@ -139,7 +140,11 @@ export async function getAccessToken(provider, credentials, log) {
     log?.warn?.("TOKEN_REFRESH", `No valid refresh token available for provider: ${provider}`);
     return null;
   }
-  return _getAccessTokenInternal(provider, credentials, log);
+  // Establish the per-connection refresh context so dedupRefresh() scopes its cache by connection
+  // (see oauthCredentialManager.refreshProviderCredentials for the full rationale).
+  return runRefreshContext(credentials.connectionId || credentials.id || null, () =>
+    _getAccessTokenInternal(provider, credentials, log)
+  );
 }
 
 async function _getAccessTokenInternal(provider, credentials, log) {
@@ -156,8 +161,12 @@ async function _getAccessTokenInternal(provider, credentials, log) {
 
 export async function refreshTokenByProvider(provider, credentials, log) {
   if (!credentials.refreshToken) return null;
-  const handler = REFRESH_HANDLERS[provider];
-  return handler ? handler(credentials, log) : refreshAccessToken(provider, credentials.refreshToken, credentials, log);
+  // Establish per-connection context (defensive: refreshProviderCredentials already does this for
+  // its own call path, but refreshTokenByProvider may be invoked directly elsewhere).
+  return runRefreshContext(credentials.connectionId || credentials.id || null, () => {
+    const handler = REFRESH_HANDLERS[provider];
+    return handler ? handler(credentials, log) : refreshAccessToken(provider, credentials.refreshToken, credentials, log);
+  });
 }
 
 export function formatProviderCredentials(provider, credentials, log) {

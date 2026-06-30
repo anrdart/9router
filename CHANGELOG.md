@@ -1,3 +1,38 @@
+# v0.5.16 (2026-06-30)
+
+## ⚠️ Breaking / behavioral changes
+- **Security: API keys now required by default.** `requireApiKey` defaults to `true` (fail-closed).
+  On a fresh or upgraded install where the LLM endpoints are reachable beyond loopback, requests
+  without a valid API key are now rejected. Local (loopback) clients are still exempt. If you
+  relied on the previous unauthenticated default, create an API key in the dashboard or set
+  `requireApiKey: false` explicitly after weighing the risk.
+- **Security: remote login with the default password (`123456`) no longer grants full access.**
+  It now issues a short-lived token scoped to setting a new password, so a leaked/known default
+  can no longer expose stored provider credentials. Set a password on first use.
+
+## Security
+- Ignore spoofed `x-9r-real-ip` under bare `next start` (only trust it via `x-9r-via-proxy` from `custom-server`)
+- Derive MITM sudo-password AES key from a persisted random secret + machineId (was recoverable from public machineId alone); backward-compat decrypt for legacy blobs; `rootCA.key` now `0600`
+- Constant-time comparison for inbound API keys (`timingSafeEqual`) instead of short-circuiting equality
+- Login limiter trust model aligned with the locality check; loopback bypasses lockout (no remote-attacker lockout of the admin)
+- CSRF Origin/Referer check on state-changing `/api/*` mutations
+
+## Fixes
+- **Kiro**: monotonic tool-call index (was hardcoded `0`, corrupting/dropping tool calls after the first in a multi-tool turn)
+- **Fallback**: 400/422 client errors now fail fast instead of retrying against every account and locking the pool for 30s
+- **Executors**: per-request `AsyncLocalStorage` context for codex/gemini-cli/antigravity/opencode-go — concurrent requests no longer cross-contaminate session id, compact flag, or model
+- **Token refresh**: `dedupRefresh` no longer caches `null` results (was taking connections offline for 10s on transient failures); dedup key includes connectionId to avoid cross-connection token-rotation desync
+- **sql.js**: atomic write (temp + rename) + robust shutdown flush (no corruption/data-loss on crash)
+- **Backup/restore**: `exportDb`/`importDb` now round-trip usage history, request details, disabled models, and lifetime counter; per-row error isolation (no full rollback on one bad row); backups include WAL sidecar files
+- **Migration**: supply `DEFAULT` for `NOT NULL` `ADD COLUMN` (was silently failing and breaking the table)
+- **Pending requests**: ref-counted safety timer (concurrent requests no longer disarm each other's timer, leaving phantom stuck requests)
+- **401/403 retry**: cancel the original error response body (was leaking an upstream socket per refresh)
+- **Combo**: serialized per-combo rotation (no lost rotation step under concurrent load); surface `Retry-After` header to client
+- **Responses API**: unique monotonic `output_index` per item; multiple `<think>` blocks each open their own reasoning item
+- **Translator**: `fixMissingToolResponses` scans ahead (no spurious empty tool results); RTK preserves error traces for OpenAI tool output; Ollama model fallback (`"ollama"` instead of undefined)
+- **Error config**: scope `capacity`/`overloaded` substring rules to rate-limit statuses (was false-matching deterministic 400s like "context capacity exceeded")
+- **Codex**: `_peekSseOverloaded` acquires reader lazily (no upstream socket leak on the retry path)
+
 # v0.5.15 (2026-06-29)
 
 ## Features

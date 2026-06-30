@@ -3,6 +3,7 @@ import {
   isUnrecoverableRefreshError,
   refreshTokenByProvider,
 } from "./tokenRefresh.js";
+import { runRefreshContext } from "./tokenRefresh/dedup.js";
 import { PROVIDER_OAUTH } from "../providers/index.js";
 
 // Single source: codex.oauth.maxRefreshAgeMs (8 days) — proactive refresh window
@@ -149,8 +150,14 @@ export async function withCredentialRefreshLock(provider, credentials, refreshFn
 export async function refreshProviderCredentials(provider, credentials, log) {
   if (!credentials) return null;
 
-  return withCredentialRefreshLock(provider, credentials, async () => {
-    const refreshed = await refreshTokenByProvider(provider, credentials, log);
-    return mergeRefreshedCredentials(provider, credentials, refreshed);
-  });
+  // Run the refresh inside a per-connection context so the deeper dedupRefresh() layer scopes its
+  // cache key by connectionId. Without this, two connections sharing a refresh-token value collapse
+  // into one dedup entry and a rotated token from one bleeds into the other (desync / refresh_token_reused).
+  // The connection-scoped lock above already serializes per connection; this closes the coarser-key gap.
+  return runRefreshContext(credentials.connectionId || credentials.id || null, () =>
+    withCredentialRefreshLock(provider, credentials, async () => {
+      const refreshed = await refreshTokenByProvider(provider, credentials, log);
+      return mergeRefreshedCredentials(provider, credentials, refreshed);
+    })
+  );
 }
