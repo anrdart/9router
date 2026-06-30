@@ -303,9 +303,12 @@ export async function POST(request) {
         case "alicode-intl":
         case "alicode":
         case "agentrouter": {
-          // Use baseUrl from PROVIDERS (DRY); separate openai-format vs claude-format flow
+          // Use baseUrl from PROVIDERS (DRY); separate openai-format vs claude-format flow.
+          // AgentRouter is an OpenAI-compatible gateway (/v1/chat/completions, Bearer) — it must
+          // validate via the OpenAI branch, NOT the Claude x-api-key branch it was previously
+          // grouped into (which would have probed with the wrong auth scheme and always failed).
           const cfg = PROVIDERS[provider];
-          const isOpenAiFormat = provider === "glm-cn" || provider === "alicode" || provider === "alicode-intl";
+          const isOpenAiFormat = provider === "glm-cn" || provider === "alicode" || provider === "alicode-intl" || provider === "agentrouter";
 
           if (isOpenAiFormat) {
             const testModel = getDefaultModel(provider);
