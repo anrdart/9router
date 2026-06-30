@@ -711,6 +711,15 @@ async function testApiKeyConnection(connection, effectiveProxy = null) {
         }, effectiveProxy);
         return { valid: res.ok, error: res.ok ? null : "Invalid API key" };
       }
+      case "agentrouter": {
+        // OpenAI-compatible gateway — verify the key against /v1/models (same shape as openai).
+        // Use the registry baseUrl (strip /chat/completions) so this stays correct if it changes.
+        const baseUrl = (PROVIDERS["agentrouter"]?.baseUrl || "https://agentrouter.org/v1/chat/completions").replace(/\/chat\/completions$/, "");
+        const res = await fetchWithConnectionProxy(`${baseUrl}/models`, {
+          headers: { Authorization: `Bearer ${connection.apiKey}` },
+        }, effectiveProxy);
+        return { valid: res.ok, error: res.ok ? null : "Invalid API key" };
+      }
       default:
         return { valid: false, error: "Provider test not supported" };
     }
