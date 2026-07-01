@@ -12,7 +12,11 @@ const proxyClientMaxBodySize = process.env.NINEROUTER_PROXY_CLIENT_MAX_BODY_SIZE
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   distDir: process.env.NEXT_DIST_DIR || ".next",
-  output: "standalone",
+  // "standalone" (default) produces a self-contained .next/standalone/server.js for Docker/CLI.
+  // Set NEXT_OUTPUT=default to build a standard .next bundle that `next start` can serve directly —
+  // needed for local production runs where standalone's manual file tracing is incomplete
+  // (missing native modules / client reference manifests cause "No SQLite driver" and manifest errors).
+  output: process.env.NEXT_OUTPUT || "standalone",
   serverExternalPackages: ["better-sqlite3", "sql.js", "node:sqlite", "bun:sqlite"],
   turbopack: {
     root: tracingRoot
