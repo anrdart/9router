@@ -10,6 +10,11 @@
     "dev:bun": "bun --bun next dev --webpack --port 20127",
     "build:bun": "bun --bun next build --webpack",
     "start:bun": "bun ./.next/standalone/server.js",
+    "dev:backend": "cd backend && go run ./cmd/server",
+    "dev:node-upstream": "PORT=20129 next dev --webpack --port 20129",
+    "dev:all": "node scripts/dev-all.js",
+    "build:backend": "cd backend && go build -o ../bin/9router-backend ./cmd/server",
+    "test:backend": "cd backend && go test ./...",
     "cli:pack": "npm --prefix cli run pack:cli",
     "cli:publish": "npm --prefix cli run publish:cli"
   },

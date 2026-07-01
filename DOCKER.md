@@ -4,6 +4,26 @@ Run 9Router in a container. Published image: [`decolua/9router`](https://hub.doc
 
 ---
 
+# 🏗 Architecture (two-process bridge)
+
+The container runs two cooperating processes behind a single public port:
+
+| Process | Internal port | Role |
+|---|---|---|
+| **Go backend** | — (binds the public `PORT` 20128) | Public entry point. Serves `/health` natively and reverse-proxies every other request to the Node engine. |
+| **Node engine** (`open-sse`) | `NINEROUTER_NODE_PORT` (default 20129) | The Next.js standalone server + open-sse engine. Receives proxied requests from Go. |
+
+Only the public port (`20128`) is exposed. The Node engine listens on `127.0.0.1`
+only and is not published. `docker-entrypoint.sh` starts Node, waits for it to be
+ready, then runs Go in the foreground. A single `trap` stops Node when Go exits so
+the container shuts down cleanly on `docker stop`.
+
+This is the same public contract as before — clients and the dashboard still use
+`http://localhost:20128`. Internally, Go is being phased in as the backend while
+Node keeps serving the engine unchanged. See `docs/MIGRATION_PLAN.md`.
+
+---
+
 # 👤 For Users
 
 ## Quick start

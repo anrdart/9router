@@ -52,6 +52,8 @@ source/*
 docs/*
 !docs/ARCHITECTURE.md
 !docs/release-*.md
+!docs/MIGRATION_AUDIT.md
+!docs/MIGRATION_PLAN.md
 test/*
 open-sse/test/*
 RM.vn.md
@@ -78,3 +80,9 @@ gitbook/README.md
 open-sse.old/
 .graphifyignore
 graphify-out/*
+
+# Go backend build output
+/bin/
+/backend/bin/
+*.test
+
