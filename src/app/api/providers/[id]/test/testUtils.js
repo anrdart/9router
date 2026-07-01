@@ -716,7 +716,10 @@ async function testApiKeyConnection(connection, effectiveProxy = null) {
         // Use the registry baseUrl (strip /chat/completions) so this stays correct if it changes.
         const baseUrl = (PROVIDERS["agentrouter"]?.baseUrl || "https://agentrouter.org/v1/chat/completions").replace(/\/chat\/completions$/, "");
         const res = await fetchWithConnectionProxy(`${baseUrl}/models`, {
-          headers: { Authorization: `Bearer ${connection.apiKey}` },
+          headers: {
+            Authorization: `Bearer ${connection.apiKey}`,
+            ...(PROVIDERS["agentrouter"]?.headers || {}),
+          },
         }, effectiveProxy);
         return { valid: res.ok, error: res.ok ? null : "Invalid API key" };
       }

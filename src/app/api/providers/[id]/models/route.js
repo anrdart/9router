@@ -200,6 +200,17 @@ const PROVIDER_MODELS_CONFIG = {
   },
   openai: createOpenAIModelsConfig("https://api.openai.com/v1/models"),
   openrouter: createOpenAIModelsConfig("https://openrouter.ai/api/v1/models"),
+  agentrouter: {
+    url: "https://agentrouter.org/v1/models",
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+      "User-Agent": "cline/1.0.0 vscode-extension",
+    },
+    authHeader: "Authorization",
+    authPrefix: "Bearer ",
+    parseResponse: parseOpenAIStyleModels
+  },
   anthropic: {
     url: "https://api.anthropic.com/v1/models",
     method: "GET",

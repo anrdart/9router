@@ -32,6 +32,14 @@ export default {
     validateUrl: "https://agentrouter.org/v1/models",
     // Models like deepseek-r1 / glm-4.6 expose reasoning over the OpenAI reasoning_content shape.
     thinkingFormat: "openai",
+    // AgentRouter gates API access on the client's User-Agent: a bare/SDK User-Agent (e.g. node,
+    // openai-js, or the executor default) is rejected with 401 "unauthorized client detected"
+    // even with a valid key. It only accepts the Cline/VS Code extension identity. Kilo Code
+    // (a Cline fork) works for the same reason — it inherits this User-Agent. Mirror it so
+    // 9router's requests are accepted. Version is not checked, only the `cline/<v> vscode-extension` shape.
+    headers: {
+      "User-Agent": "cline/1.0.0 vscode-extension",
+    },
   },
   models: [
     { id: "claude-sonnet-4-5-20250929", name: "Claude Sonnet 4.5" },

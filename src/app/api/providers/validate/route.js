@@ -314,7 +314,11 @@ export async function POST(request) {
             const testModel = getDefaultModel(provider);
             const res = await fetch(cfg.baseUrl, {
               method: "POST",
-              headers: { "Authorization": `Bearer ${apiKey}`, "content-type": "application/json" },
+              headers: {
+                "Authorization": `Bearer ${apiKey}`,
+                "content-type": "application/json",
+                ...(cfg.headers || {}),
+              },
               body: JSON.stringify({ model: testModel, max_tokens: 1, messages: [{ role: "user", content: "test" }] }),
             });
             isValid = res.status !== 401 && res.status !== 403;
