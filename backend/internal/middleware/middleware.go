@@ -2,11 +2,14 @@
 package middleware
 
 import (
+	"bufio"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"runtime/debug"
 	"strings"
@@ -80,6 +83,33 @@ func (s *statusRecorder) Write(b []byte) (int, error) {
 		s.wroteHeader = true
 	}
 	return s.ResponseWriter.Write(b)
+}
+
+// Hijack delegates to the underlying ResponseWriter so protocol upgrades
+// (WebSocket, HTTP/2 prior-knowledge, etc.) work through the logging wrapper.
+// Without this, httputil.ReverseProxy fails WebSocket handshakes with
+// "can't switch protocols using non-Hijacker ResponseWriter".
+func (s *statusRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	h, ok := s.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, fmt.Errorf("inner ResponseWriter of type %T is not a Hijacker", s.ResponseWriter)
+	}
+	return h.Hijack()
+}
+
+// Flush delegates to the underlying Flusher so chunked/SSE responses flush
+// immediately rather than being buffered by the recorder.
+func (s *statusRecorder) Flush() {
+	if f, ok := s.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+// Unwrap exposes the underlying ResponseWriter so middleware/handlers that need
+// to assert a concrete type (e.g. http.Hijacker) can reach it. Go 1.20+ uses
+// this for ResponseUnwrapError-based interface resolution.
+func (s *statusRecorder) Unwrap() http.ResponseWriter {
+	return s.ResponseWriter
 }
 
 // Logging records one structured log line per request: method, path, status,
