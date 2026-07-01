@@ -21,36 +21,36 @@ type rowScanner interface {
 // behaviour (raw over defaults) is identical to mergeWithDefaults().
 func DefaultSettings() map[string]any {
 	return map[string]any{
-		"cloudEnabled":              false,
-		"tunnelEnabled":             false,
-		"tunnelUrl":                 "",
-		"tunnelProvider":            "cloudflare",
-		"tailscaleEnabled":          false,
-		"tailscaleUrl":              "",
-		"stickyRoundRobinLimit":     3,
-		"providerStrategies":        map[string]any{},
-		"comboStrategy":             "fallback",
+		"cloudEnabled":               false,
+		"tunnelEnabled":              false,
+		"tunnelUrl":                  "",
+		"tunnelProvider":             "cloudflare",
+		"tailscaleEnabled":           false,
+		"tailscaleUrl":               "",
+		"stickyRoundRobinLimit":      3,
+		"providerStrategies":         map[string]any{},
+		"comboStrategy":              "fallback",
 		"comboStickyRoundRobinLimit": 1,
-		"comboStrategies":           map[string]any{},
-		"requireLogin":              true,
-		"requireApiKey":             true,
-		"tunnelDashboardAccess":     true,
-		"authMode":                  "password",
-		"oidcIssuerUrl":             "",
-		"oidcClientId":              "",
-		"oidcScopes":                "openid profile email",
-		"oidcLoginLabel":            "Sign in with OIDC",
-		"enableObservability":       true,
-		"observabilityMaxRecords":   1000,
-		"outboundProxyEnabled":      false,
-		"outboundProxyUrl":          "",
-		"outboundNoProxy":           "",
-		"rtkEnabled":                true,
-		"headroomEnabled":           false,
-		"cavemanEnabled":            false,
-		"cavemanLevel":              "full",
-		"ponytailEnabled":           false,
-		"ponytailLevel":             "full",
+		"comboStrategies":            map[string]any{},
+		"requireLogin":               true,
+		"requireApiKey":              true,
+		"tunnelDashboardAccess":      true,
+		"authMode":                   "password",
+		"oidcIssuerUrl":              "",
+		"oidcClientId":               "",
+		"oidcScopes":                 "openid profile email",
+		"oidcLoginLabel":             "Sign in with OIDC",
+		"enableObservability":        true,
+		"observabilityMaxRecords":    1000,
+		"outboundProxyEnabled":       false,
+		"outboundProxyUrl":           "",
+		"outboundNoProxy":            "",
+		"rtkEnabled":                 true,
+		"headroomEnabled":            false,
+		"cavemanEnabled":             false,
+		"cavemanLevel":               "full",
+		"ponytailEnabled":            false,
+		"ponytailLevel":              "full",
 	}
 }
 
@@ -252,88 +252,37 @@ func joinAnd(parts []string) string {
 	return out
 }
 
+// ProviderNodeNames returns a map of providerNodes id → name, used to enrich the
+// display name of OpenAI/Anthropic-compatible connections (mirrors the
+// nodeNameMap built in src/app/api/providers/route.js). A read error yields an
+// empty map so provider listing degrades gracefully rather than failing.
+func (db *DB) ProviderNodeNames(ctx context.Context) map[string]string {
+	out := map[string]string{}
+	rows, err := db.QueryContext(ctx, "SELECT id, name FROM providerNodes")
+	if err != nil {
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var name sql.NullString
+		if err := rows.Scan(&id, &name); err != nil {
+			return out
+		}
+		if id != "" && name.Valid && name.String != "" {
+			out[id] = name.String
+		}
+	}
+	return out
+}
+
 // ---- Usage history ----------------------------------------------------------
 
 // UsageRow mirrors a usageHistory row (used for read-only /api/usage/*).
-type UsageRow struct {
-	ID               int64          `json:"id"`
-	Timestamp        string         `json:"timestamp"`
-	Provider         sql.NullString `json:"provider"`
-	Model            sql.NullString `json:"model"`
-	ConnectionID     sql.NullString `json:"connectionId"`
-	APIKey           sql.NullString `json:"apiKey"`
-	Endpoint         sql.NullString `json:"endpoint"`
-	PromptTokens     sql.NullInt64  `json:"promptTokens"`
-	CompletionTokens sql.NullInt64  `json:"completionTokens"`
-	Cost             sql.NullFloat64 `json:"cost"`
-	Status           sql.NullString `json:"status"`
-	Tokens           sql.NullString `json:"tokens"`
-	Meta             sql.NullString `json:"meta"`
-}
-
-func (u UsageRow) ToJSON() map[string]any {
-	m := map[string]any{
-		"id":        u.ID,
-		"timestamp": u.Timestamp,
-	}
-	if u.Provider.Valid {
-		m["provider"] = u.Provider.String
-	}
-	if u.Model.Valid {
-		m["model"] = u.Model.String
-	}
-	if u.ConnectionID.Valid {
-		m["connectionId"] = u.ConnectionID.String
-	}
-	if u.APIKey.Valid {
-		m["apiKey"] = u.APIKey.String
-	}
-	if u.Endpoint.Valid {
-		m["endpoint"] = u.Endpoint.String
-	}
-	if u.PromptTokens.Valid {
-		m["promptTokens"] = u.PromptTokens.Int64
-	}
-	if u.CompletionTokens.Valid {
-		m["completionTokens"] = u.CompletionTokens.Int64
-	}
-	if u.Cost.Valid {
-		m["cost"] = u.Cost.Float64
-	}
-	if u.Status.Valid {
-		m["status"] = u.Status.String
-	}
-	return m
-}
-
-// RecentUsage returns the most recent N usage rows (newest first).
-func (db *DB) RecentUsage(ctx context.Context, limit int) ([]UsageRow, error) {
-	if limit <= 0 || limit > 1000 {
-		limit = 100
-	}
-	rows, err := db.QueryContext(ctx,
-		"SELECT id, timestamp, provider, model, connectionId, apiKey, endpoint, promptTokens, completionTokens, cost, status, tokens, meta FROM usageHistory ORDER BY timestamp DESC LIMIT ?", limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []UsageRow
-	for rows.Next() {
-		var u UsageRow
-		if err := rows.Scan(&u.ID, &u.Timestamp, &u.Provider, &u.Model, &u.ConnectionID, &u.APIKey, &u.Endpoint, &u.PromptTokens, &u.CompletionTokens, &u.Cost, &u.Status, &u.Tokens, &u.Meta); err != nil {
-			return nil, err
-		}
-		out = append(out, u)
-	}
-	return out, rows.Err()
-}
-
-// UsageCount returns total rows and a timestamp range for quick stats.
-func (db *DB) UsageCount(ctx context.Context) (total int64, oldest, newest sql.NullString, err error) {
-	err = db.QueryRowContext(ctx,
-		"SELECT COUNT(*), MIN(timestamp), MAX(timestamp) FROM usageHistory").Scan(&total, &oldest, &newest)
-	return
-}
+// Usage read paths (getRecentLogs / getUsageStats) live in usage.go. The DB
+// layer intentionally exposes NO raw-row accessor that carries apiKey, so a
+// caller cannot accidentally leak credentials the way an earlier UsageRow.ToJSON
+// did — usage output is either pre-formatted log strings or masked aggregates.
 
 // nowISO returns an RFC3339 timestamp, matching Node's new Date().toISOString().
 func nowISO() string { return time.Now().UTC().Format("2006-01-02T15:04:05.000Z") }

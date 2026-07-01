@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 
 	"9router/backend/internal/middleware"
 )
@@ -56,6 +57,9 @@ func SettingsGET(w http.ResponseWriter, r *http.Request) {
 	}
 	safe["oidcConfigured"] = oidcConfigured
 	safe["hasPassword"] = hasPassword
+	// Env-derived feature flags, matching src/app/api/settings/route.js.
+	safe["enableRequestLogs"] = os.Getenv("ENABLE_REQUEST_LOGS") == "true"
+	safe["enableTranslator"] = os.Getenv("ENABLE_TRANSLATOR") == "true"
 
 	writeJSON(w, http.StatusOK, safe)
 }

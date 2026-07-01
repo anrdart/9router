@@ -74,6 +74,35 @@ func TestSettingsGETStripsSecrets(t *testing.T) {
 	if resp["hasPassword"] != true {
 		t.Errorf("hasPassword = %v, want true", resp["hasPassword"])
 	}
+	// Env feature flags are always present (default false).
+	if _, ok := resp["enableRequestLogs"]; !ok {
+		t.Error("enableRequestLogs missing from settings response")
+	}
+	if _, ok := resp["enableTranslator"]; !ok {
+		t.Error("enableTranslator missing from settings response")
+	}
+}
+
+// TestSettingsGETEnvFlags verifies the env-derived flags reflect the environment.
+func TestSettingsGETEnvFlags(t *testing.T) {
+	t.Setenv("ENABLE_REQUEST_LOGS", "true")
+	t.Setenv("ENABLE_TRANSLATOR", "false")
+	db := openDB(t)
+	seedSettings(t, db, map[string]any{"requireLogin": false})
+
+	h := middleware.WithDB(db)(http.HandlerFunc(httpapi.SettingsGET))
+	req := httptest.NewRequest(http.MethodGet, "/api/settings", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	var resp map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
+	if resp["enableRequestLogs"] != true {
+		t.Errorf("enableRequestLogs = %v, want true", resp["enableRequestLogs"])
+	}
+	if resp["enableTranslator"] != false {
+		t.Errorf("enableTranslator = %v, want false", resp["enableTranslator"])
+	}
 }
 
 // TestSettingsGETHonorsMerge verifies defaults are present for unset keys.

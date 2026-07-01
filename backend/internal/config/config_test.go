@@ -87,8 +87,33 @@ func TestLoadKeepsGoDefaultWhenSharedPortEqualsUpstream(t *testing.T) {
 }
 
 func TestAddr(t *testing.T) {
-	c := Config{Port: 20128}
-	if got := c.Addr(); got != ":20128" {
-		t.Errorf("Addr = %q, want :20128", got)
+	if got := (Config{Host: "127.0.0.1", Port: 20128}).Addr(); got != "127.0.0.1:20128" {
+		t.Errorf("Addr = %q, want 127.0.0.1:20128", got)
+	}
+	if got := (Config{Host: "0.0.0.0", Port: 20128}).Addr(); got != "0.0.0.0:20128" {
+		t.Errorf("Addr = %q, want 0.0.0.0:20128", got)
+	}
+}
+
+// TestLoadDefaultHost verifies the bind host defaults to loopback and honors
+// GO_HOST (defense-in-depth: not network-reachable unless explicitly exposed).
+func TestLoadDefaultHost(t *testing.T) {
+	t.Setenv("GO_HOST", "")
+	t.Setenv("HOST", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Host != "127.0.0.1" {
+		t.Errorf("default Host = %q, want 127.0.0.1", cfg.Host)
+	}
+
+	t.Setenv("GO_HOST", "0.0.0.0")
+	cfg2, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg2.Host != "0.0.0.0" {
+		t.Errorf("GO_HOST override = %q, want 0.0.0.0", cfg2.Host)
 	}
 }

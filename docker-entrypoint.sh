@@ -58,5 +58,10 @@ done
 # --- 3) Hand off to the Go backend (foreground) --------------------------
 # Go serves the public port and proxies to Node. Receiving SIGINT/SIGTERM here
 # (e.g. `docker stop`) triggers Go's graceful shutdown, then our trap stops Node.
+#
+# The Go backend binds loopback by default (defense-in-depth). Inside the
+# container it MUST bind all interfaces so the published port (-p host:20128)
+# reaches it; the dashboard auth guard (JWT/CLI token) is the access control.
+# An explicit GO_HOST in the environment still wins.
 echo "[entrypoint] starting Go backend on :${PORT:-20128} (proxy -> :${NODE_PORT})"
-exec su-exec node /usr/local/bin/9router-backend
+exec su-exec node env GO_HOST="${GO_HOST:-0.0.0.0}" /usr/local/bin/9router-backend

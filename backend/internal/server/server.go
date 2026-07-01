@@ -42,11 +42,14 @@ func New(cfg config.Config, db *database.DB, logger *slog.Logger) (*http.Server,
 	// --- Protected /api/* reads --------------------------------------------
 	// Each is registered with an exact method so a different method (e.g. PATCH
 	// /api/settings) does NOT match and falls through to "/" → proxy → Node.
-	mux.Handle("GET /api/settings", middleware.RequireDashboardAuth(http.HandlerFunc(httpapi.SettingsGET)))
-	mux.Handle("GET /api/keys", middleware.RequireDashboardAuth(http.HandlerFunc(httpapi.APIKeysGET)))
-	mux.Handle("GET /api/providers", middleware.RequireDashboardAuth(http.HandlerFunc(httpapi.ProvidersGET)))
-	mux.Handle("GET /api/usage/logs", middleware.RequireDashboardAuth(http.HandlerFunc(httpapi.UsageLogsGET)))
-	mux.Handle("GET /api/usage/stats", middleware.RequireDashboardAuth(http.HandlerFunc(httpapi.UsageStatsGET)))
+	// The guard reads Node's shared secrets under DATA_DIR to accept dashboard
+	// JWT sessions / CLI tokens without a proxy round trip.
+	guard := middleware.NewGuard(cfg.DataDir)
+	mux.Handle("GET /api/settings", guard.Require(http.HandlerFunc(httpapi.SettingsGET)))
+	mux.Handle("GET /api/keys", guard.Require(http.HandlerFunc(httpapi.APIKeysGET)))
+	mux.Handle("GET /api/providers", guard.Require(http.HandlerFunc(httpapi.ProvidersGET)))
+	mux.Handle("GET /api/usage/logs", guard.Require(http.HandlerFunc(httpapi.UsageLogsGET)))
+	mux.Handle("GET /api/usage/stats", guard.Require(http.HandlerFunc(httpapi.UsageStatsGET)))
 
 	// --- Catch-all reverse proxy (everything else) --------------------------
 	mux.Handle("/", rp)

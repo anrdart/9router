@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"9router/backend/internal/database"
@@ -137,9 +138,9 @@ func TestValidateApiKey(t *testing.T) {
 	}
 
 	cases := []struct {
-		name    string
-		key     string
-		wantOK  bool
+		name   string
+		key    string
+		wantOK bool
 	}{
 		{"active key", "sk-active-secret", true},
 		{"inactive key", "sk-inactive-secret", false},
@@ -198,7 +199,9 @@ func TestListProviderConnections(t *testing.T) {
 	if j["isActive"] != true {
 		t.Errorf("isActive = %v", j["isActive"])
 	}
-	// The opaque data blob fields should be merged in.
+	// The DB layer intentionally merges the full opaque data blob (including
+	// secrets) — faithful round-trip is the repo's job. Secret REDACTION happens
+	// at the HTTP boundary (httpapi.ProvidersGET); see TestProvidersGETRedactsSecrets.
 	if j["apiKey"] != "sk-xxx" {
 		t.Errorf("apiKey from data blob = %v, want sk-xxx", j["apiKey"])
 	}
@@ -242,16 +245,19 @@ func TestListProviderConnectionsFilter(t *testing.T) {
 	}
 }
 
-// TestRecentUsage verifies usage rows are returned newest-first.
-func TestRecentUsage(t *testing.T) {
+// TestRecentLogs verifies logs come back newest-first as formatted strings and
+// never contain the raw API key (getRecentLogs does not select it).
+func TestRecentLogs(t *testing.T) {
 	db := openTempDB(t)
 	ctx := context.Background()
 
 	err := db.WithWriteLock(ctx, func(tx *sql.Tx) error {
-		for i, ts := range []string{"2026-01-01", "2026-01-02", "2026-01-03"} {
+		for i, ts := range []string{
+			"2026-01-01T10:00:00.000Z", "2026-01-02T10:00:00.000Z", "2026-01-03T10:00:00.000Z",
+		} {
 			if _, e := tx.Exec(
-				"INSERT INTO usageHistory(timestamp, provider, model, promptTokens, completionTokens, status) VALUES(?,?,?,?,?,?)",
-				ts, "openai", "gpt-4", i*10, i*5, "200",
+				"INSERT INTO usageHistory(timestamp, provider, model, apiKey, promptTokens, completionTokens, status) VALUES(?,?,?,?,?,?,?)",
+				ts, "openai", "gpt-4", "sk-SECRET-KEY", i*10, i*5, "200",
 			); e != nil {
 				return e
 			}
@@ -262,15 +268,25 @@ func TestRecentUsage(t *testing.T) {
 		t.Fatalf("insert usage: %v", err)
 	}
 
-	rows, err := db.RecentUsage(ctx, 10)
+	logs, err := db.RecentLogs(ctx, 10)
 	if err != nil {
-		t.Fatalf("RecentUsage: %v", err)
+		t.Fatalf("RecentLogs: %v", err)
 	}
-	if len(rows) != 3 {
-		t.Fatalf("got %d rows, want 3", len(rows))
+	if len(logs) != 3 {
+		t.Fatalf("got %d logs, want 3", len(logs))
 	}
-	// Newest first.
-	if rows[0].Timestamp != "2026-01-03" {
-		t.Errorf("first row timestamp = %q, want newest", rows[0].Timestamp)
+	// Newest first: the 03 row must render before the 01 row.
+	if !strings.Contains(logs[0], "03-01-2026") {
+		t.Errorf("first log = %q, want newest (03-01-2026)", logs[0])
+	}
+	// The raw API key must never appear.
+	for _, l := range logs {
+		if strings.Contains(l, "sk-SECRET-KEY") {
+			t.Errorf("raw apiKey leaked in log line: %q", l)
+		}
+		// Node uppercases only the provider, not the model.
+		if !strings.Contains(l, "gpt-4") || !strings.Contains(l, "OPENAI") {
+			t.Errorf("log line missing expected fields: %q", l)
+		}
 	}
 }

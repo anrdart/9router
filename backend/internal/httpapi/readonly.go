@@ -3,11 +3,28 @@ package httpapi
 import (
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
+	"9router/backend/internal/database"
 	"9router/backend/internal/middleware"
 )
 
-// APIKeysGET handles GET /api/keys — returns all keys ordered by createdAt.
+// Provider id prefixes for OpenAI/Anthropic-compatible custom nodes, matching
+// src/shared/constants/providers.js. Compatible connections get their display
+// name enriched from the providerNodes table.
+const (
+	openAICompatiblePrefix    = "openai-compatible-"
+	anthropicCompatiblePrefix = "anthropic-compatible-"
+)
+
+// providerSecretFields are stripped from every /api/providers response. These
+// exactly mirror the fields deleted in src/app/api/providers/route.js:69-76 so
+// OAuth tokens and API keys stored in the opaque data blob are never returned.
+var providerSecretFields = []string{"apiKey", "accessToken", "refreshToken", "idToken"}
+
+// APIKeysGET handles GET /api/keys — returns {keys:[...]} ordered by createdAt,
+// matching the Node response envelope the dashboard store expects.
 func APIKeysGET(w http.ResponseWriter, r *http.Request) {
 	db := middleware.DBFromContext(r.Context())
 	if db == nil {
@@ -19,11 +36,13 @@ func APIKeysGET(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, keys)
+	writeJSON(w, http.StatusOK, map[string]any{"keys": keys})
 }
 
-// ProvidersGET handles GET /api/providers — returns connections, optionally
-// filtered by provider/active query params (mirrors Node semantics).
+// ProvidersGET handles GET /api/providers. It returns {connections:[...]} with
+// provider secrets stripped and compatible-provider names enriched, matching
+// src/app/api/providers/route.js. The provider/isActive query params are an
+// optional filtering superset (the dashboard fetches without params → all).
 func ProvidersGET(w http.ResponseWriter, r *http.Request) {
 	db := middleware.DBFromContext(r.Context())
 	if db == nil {
@@ -40,6 +59,8 @@ func ProvidersGET(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	nodeNames := db.ProviderNodeNames(r.Context())
+
 	out := make([]map[string]any, 0, len(conns))
 	for _, c := range conns {
 		j, err := c.ToJSON()
@@ -47,13 +68,46 @@ func ProvidersGET(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
+		redactProviderSecrets(j)
+		j["name"] = enrichConnectionName(j, nodeNames)
 		out = append(out, j)
 	}
-	writeJSON(w, http.StatusOK, out)
+	writeJSON(w, http.StatusOK, map[string]any{"connections": out})
 }
 
-// UsageLogsGET handles GET /api/usage/logs — returns recent usage rows.
-// Query param `limit` (default 100, max 1000) controls the page size.
+// redactProviderSecrets removes credential fields from a serialized connection.
+func redactProviderSecrets(j map[string]any) {
+	for _, f := range providerSecretFields {
+		delete(j, f)
+	}
+}
+
+// enrichConnectionName reproduces the compatible-provider name fallback in
+// route.js: name || nodeNameMap[provider] || providerSpecificData.nodeName ||
+// provider. Non-compatible providers keep their stored name unchanged.
+func enrichConnectionName(j map[string]any, nodeNames map[string]string) any {
+	provider, _ := j["provider"].(string)
+	name, _ := j["name"].(string)
+	if !strings.HasPrefix(provider, openAICompatiblePrefix) && !strings.HasPrefix(provider, anthropicCompatiblePrefix) {
+		return j["name"]
+	}
+	if name != "" {
+		return name
+	}
+	if n := nodeNames[provider]; n != "" {
+		return n
+	}
+	if psd, ok := j["providerSpecificData"].(map[string]any); ok {
+		if nn, ok := psd["nodeName"].(string); ok && nn != "" {
+			return nn
+		}
+	}
+	return provider
+}
+
+// UsageLogsGET handles GET /api/usage/logs — returns a JSON array of pre-formatted
+// log strings matching getRecentLogs() in usageRepo.js. The raw apiKey is never
+// included (the Node query does not select it). Default 200 rows.
 func UsageLogsGET(w http.ResponseWriter, r *http.Request) {
 	db := middleware.DBFromContext(r.Context())
 	if db == nil {
@@ -61,38 +115,40 @@ func UsageLogsGET(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	rows, err := db.RecentUsage(r.Context(), limit)
+	if limit <= 0 {
+		limit = 200
+	}
+	logs, err := db.RecentLogs(r.Context(), limit)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	out := make([]map[string]any, 0, len(rows))
-	for _, u := range rows {
-		out = append(out, u.ToJSON())
-	}
-	writeJSON(w, http.StatusOK, out)
+	writeJSON(w, http.StatusOK, logs)
 }
 
-// UsageStatsGET handles GET /api/usage/stats — returns a small summary object.
+// UsageStatsGET handles GET /api/usage/stats — returns the persisted usage
+// aggregation matching getUsageStats() in usageRepo.js. Live fields
+// (activeRequests, pending, errorProvider) are emitted empty; the dashboard's
+// SSE stream (proxied to Node) supplies them. Query param `period` defaults to
+// "7d" and must be one of the valid periods.
 func UsageStatsGET(w http.ResponseWriter, r *http.Request) {
 	db := middleware.DBFromContext(r.Context())
 	if db == nil {
 		writeError(w, http.StatusInternalServerError, "database unavailable")
 		return
 	}
-	total, oldest, newest, err := db.UsageCount(r.Context())
+	period := r.URL.Query().Get("period")
+	if period == "" {
+		period = "7d"
+	}
+	if !database.ValidStatsPeriods[period] {
+		writeError(w, http.StatusBadRequest, "Invalid period")
+		return
+	}
+	stats, err := db.UsageStats(r.Context(), period, time.Now())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	resp := map[string]any{
-		"total": total,
-	}
-	if oldest.Valid {
-		resp["oldest"] = oldest.String
-	}
-	if newest.Valid {
-		resp["newest"] = newest.String
-	}
-	writeJSON(w, http.StatusOK, resp)
+	writeJSON(w, http.StatusOK, stats)
 }

@@ -70,10 +70,23 @@ streaming passthrough, client-disconnect propagation. 18 unit/integration tests 
 | `backend/internal/httpapi/settings.go` | `GET /api/settings` (secret redaction + defaults) |
 | `backend/internal/httpapi/readonly.go` | `GET /api/keys`, `/api/providers`, `/api/usage/{logs,stats}` |
 
-### Phase 3 — Auth middleware parity (next)
-Full match of `src/dashboardGuard.js`: JWT dashboard session (golang-jwt), OIDC,
-CLI machine-id token, CSRF same-origin check, force-password-change lock, and
-LOCAL_ONLY_PATHS. Once done, mutations (PATCH/POST/DELETE) can move native too.
+### Phase 3 — DONE ✅ (this branch)
+Native read routes are now safe enough to stay in Go:
+- Dashboard auth parity for native `/api/*` reads: shared `auth_token` JWT
+  verification (stdlib HS256, same `DATA_DIR/jwt-secret` as Node), CLI machine
+  token parity (`DATA_DIR/machine-id` + `auth/cli-secret`), `requireLogin=false`,
+  and force-password-change lockout. Host-locality and LLM API keys no longer
+  grant dashboard access.
+- Go binds `127.0.0.1` by default; Docker explicitly sets `GO_HOST=0.0.0.0` so
+  published container ports still work with auth enforced.
+- `/api/providers` strips `apiKey`, `accessToken`, `refreshToken`, `idToken` and
+  returns the Node-compatible `{ connections }` envelope.
+- `/api/keys` returns the Node-compatible `{ keys }` envelope.
+- `/api/usage/logs` returns Node-compatible formatted log strings and never emits
+  raw API keys.
+- `/api/usage/stats` ports the DB-backed aggregation with masked API keys. Live
+  fields (`activeRequests`, `pending`, `errorProvider`) remain owned by Node's
+  proxied `/api/usage/stream` SSE endpoint until the chat pipeline moves to Go.
 
 ### Phase 4 — Native OpenAI-compatible `/v1`
 - `GET /v1/models` (read-only, aggregates DB) — native first.
@@ -121,10 +134,15 @@ See `.env.example`. Key additions for the bridge:
 ```
 NODE_UPSTREAM=http://127.0.0.1:20129
 NINEROUTER_NODE_PORT=20129
+# Optional direct-run exposure; default is loopback-only:
+# GO_HOST=0.0.0.0
 ```
 
-## Security (Phase 1 baseline)
-- `/health` is the only native endpoint; all else keeps Node's existing auth.
+## Security (current baseline)
+- Native `/api/*` reads require dashboard JWT, CLI machine token, or `requireLogin=false`.
+  Host-locality and inbound LLM API keys do **not** grant dashboard access.
+- Go binds `127.0.0.1` by default; Docker sets `GO_HOST=0.0.0.0` explicitly.
+- Native provider/usage responses strip/mask stored provider credentials and API keys.
 - Go logs **never** include `Authorization`, `X-Api-Key`, `X-9R-*`, `Cookie`
   (verified by `TestLoggingNoSecretsInLine`).
 - Request bodies capped at 128 MiB (configurable via `GO_BODY_MAX_MB`).
@@ -149,3 +167,15 @@ NINEROUTER_NODE_PORT=20129
 - [x] Non-local request without API key → 401; `PATCH /api/settings` → proxied to Node.
 - [x] Docker container (two-process bridge) rebuilds and runs with the real DB volume.
 - [x] Graceful shutdown (`docker stop`) exits cleanly in <0.2 s.
+
+## Verification (Definition of Done — Phase 3)
+- [x] `go test ./...` covers auth JWT/CLI/force-change gates, settings/env flags,
+      provider redaction/envelope, usage log no-key-leak, DB-only stats aggregation,
+      and the previous single-connection deadlock trap.
+- [x] Valid dashboard JWT cookie → native `/api/*` 200; expired/missing JWT → 401.
+- [x] Force-password-change JWT → `/api/settings` allowed, `/api/keys` 403.
+- [x] Valid LLM API key alone no longer grants dashboard/native `/api/*` access.
+- [x] `GET /api/providers` strips `apiKey/accessToken/refreshToken/idToken` and wraps `{connections}`.
+- [x] `GET /api/usage/logs` returns formatted strings and cannot emit raw API keys.
+- [x] `GET /api/usage/stats` masks API keys and emits empty live fields for Node SSE overlay.
+- [x] Default Go bind is `127.0.0.1`; Docker exposes by setting `GO_HOST=0.0.0.0`.

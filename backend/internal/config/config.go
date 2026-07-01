@@ -8,7 +8,9 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +18,13 @@ import (
 
 // Config holds all Go-backend runtime knobs.
 type Config struct {
+	// Host is the interface the Go backend binds to. Defaults to loopback
+	// (127.0.0.1) so the dashboard/native API is unreachable from the network
+	// unless explicitly exposed via GO_HOST/HOST (defense-in-depth: even an auth
+	// bug cannot be reached remotely by default). The Docker image sets
+	// GO_HOST=0.0.0.0 so the published container port works.
+	Host string
+
 	// Port the Go backend listens on (the single public entry point).
 	Port int
 
@@ -41,6 +50,7 @@ type Config struct {
 
 // Defaults match the documented .env.example contract.
 const (
+	defaultHost             = "127.0.0.1"
 	defaultPort             = 20128
 	defaultNodeUpstream     = "http://127.0.0.1:20129"
 	defaultRequestBodyMaxMB = 128
@@ -51,6 +61,7 @@ const (
 // syntactically invalid (e.g. non-numeric PORT).
 func Load() (Config, error) {
 	cfg := Config{
+		Host:                getenv("GO_HOST", getenv("HOST", defaultHost)),
 		Port:                defaultPort,
 		NodeUpstream:        getenv("NODE_UPSTREAM", defaultNodeUpstream),
 		DataDir:             getenv("DATA_DIR", ""),
@@ -86,11 +97,21 @@ func Load() (Config, error) {
 		return cfg, fmt.Errorf("NODE_UPSTREAM must not be empty")
 	}
 
+	// Resolve DataDir to the same location Node uses (dataDir.js): DATA_DIR env,
+	// else ~/.9router. This must match so the auth guard reads the SAME
+	// jwt-secret / machine-id / cli-secret files Node writes, and the DB opens
+	// the same file. Leaving it "" would split them.
+	if cfg.DataDir == "" {
+		if home, err := os.UserHomeDir(); err == nil {
+			cfg.DataDir = filepath.Join(home, ".9router")
+		}
+	}
+
 	return cfg, nil
 }
 
 // Addr returns the listen address for the configured port.
-func (c Config) Addr() string { return fmt.Sprintf(":%d", c.Port) }
+func (c Config) Addr() string { return net.JoinHostPort(c.Host, strconv.Itoa(c.Port)) }
 
 func getenv(key, def string) string {
 	if v, ok := os.LookupEnv(key); ok && v != "" {

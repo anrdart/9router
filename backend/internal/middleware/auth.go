@@ -4,7 +4,9 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"time"
 
+	"9router/backend/internal/auth"
 	"9router/backend/internal/database"
 )
 
@@ -96,38 +98,109 @@ func ExtractAPIKey(r *http.Request) string {
 	return r.URL.Query().Get("key")
 }
 
-// CanAccessDashboard checks whether a request to a protected /api/* endpoint is
-// allowed. This is the Phase-2 subset of dashboardGuard logic: local requests
-// pass; otherwise a valid API key is required. Full JWT/OIDC/CLI-token parity is
-// deferred to Phase 3 — until then, non-local browser sessions are proxied to
-// Node (which enforces the complete auth rules).
-func CanAccessDashboard(ctx context.Context, r *http.Request) bool {
-	if IsLocalRequest(r) {
-		return true
-	}
-	db := DBFromContext(ctx)
-	if db == nil {
-		return false
-	}
-	key := ExtractAPIKey(r)
-	if key == "" {
-		return false
-	}
-	ok, err := db.ValidateApiKey(ctx, key)
-	return err == nil && ok
+// authCookie is the dashboard JWT cookie name (matches dashboardSession.js).
+const authCookie = "auth_token"
+
+// cliTokenHeader carries the CLI machine token (matches dashboardGuard.js).
+const cliTokenHeader = "X-9R-Cli-Token"
+
+// forcePasswordChangeAllowed mirrors FORCE_PASSWORD_CHANGE_ALLOWED in
+// dashboardGuard.js. A session flagged force_password_change may reach ONLY these
+// paths (so a leaked/known default password cannot unlock stored credentials).
+// Of the native Go routes only /api/settings is in this set; the others 403.
+var forcePasswordChangeAllowed = map[string]bool{
+	"/api/settings":    true,
+	"/api/auth/status": true,
+	"/api/auth/logout": true,
 }
 
-// RequireDashboardAuth gates a handler with CanAccessDashboard, returning 401 on
-// failure. Non-local requests that lack a key fall through to the reverse proxy
-// (handled at the mux level), so Node can still authenticate them via JWT.
-func RequireDashboardAuth(next http.Handler) http.Handler {
+// Guard enforces dashboard auth on protected native /api/* routes. It reads the
+// SAME secrets Node writes under dataDir, so a browser session (auth_token JWT)
+// or CLI token minted by Node is accepted unchanged — no reverse-proxy round trip.
+//
+// This intentionally does NOT grant access on host locality or on an inbound LLM
+// API key: dashboardGuard.js gates /api/* on dashboard JWT / CLI token /
+// requireLogin===false only. Binding loopback-by-default (see config.Host) is the
+// separate network control.
+type Guard struct {
+	dataDir string
+	now     func() time.Time // injectable for tests
+}
+
+// NewGuard builds a Guard reading Node's secrets from dataDir.
+func NewGuard(dataDir string) *Guard {
+	return &Guard{dataDir: dataDir, now: time.Now}
+}
+
+// jwtSession verifies the auth_token cookie and returns its claims, or nil if
+// absent/invalid/expired. The JWT secret is read per call (a tiny file) so Go
+// picks it up even when Node creates it lazily after Go has started.
+func (g *Guard) jwtSession(r *http.Request) *auth.Claims {
+	c, err := r.Cookie(authCookie)
+	if err != nil || c.Value == "" {
+		return nil
+	}
+	secret := auth.LoadJWTSecret(g.dataDir)
+	claims, err := auth.VerifyJWT(c.Value, secret, g.now())
+	if err != nil {
+		return nil
+	}
+	return claims
+}
+
+// allowed reports whether a GET to a protected native /api/* route is permitted,
+// and if not, the status to return (403 for a force-password-change lockout,
+// otherwise 401). Mirrors the /api/* branch of dashboardGuard.proxy().
+func (g *Guard) allowed(r *http.Request) (ok bool, status int) {
+	session := g.jwtSession(r)
+
+	// A force-password-change session is locked to password-setting routes only.
+	if session != nil && session.ForcePasswordChange {
+		if forcePasswordChangeAllowed[r.URL.Path] {
+			return true, 0
+		}
+		return false, http.StatusForbidden
+	}
+
+	// CLI machine token.
+	if auth.ValidCLIToken(r.Header.Get(cliTokenHeader), g.dataDir) {
+		return true, 0
+	}
+
+	// Valid (non-force) dashboard JWT.
+	if session != nil {
+		return true, 0
+	}
+
+	// requireLogin disabled → open (matches isAuthenticated()).
+	if db := DBFromContext(r.Context()); db != nil {
+		if settings, err := db.GetSettings(r.Context()); err == nil {
+			if rl, isBool := settings["requireLogin"].(bool); isBool && !rl {
+				return true, 0
+			}
+		}
+	}
+
+	return false, http.StatusUnauthorized
+}
+
+// Require gates a handler with allowed(). On denial it writes 401 Unauthorized,
+// or 403 with a forcePasswordChange flag when a force-change session tried to
+// reach a route outside the allow-list.
+func (g *Guard) Require(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if CanAccessDashboard(r.Context(), r) {
+		ok, status := g.allowed(r)
+		if ok {
 			next.ServeHTTP(w, r)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(status)
+		if status == http.StatusForbidden {
+			_, _ = w.Write([]byte(`{"error":"Password change required","forcePasswordChange":true}`))
+			return
+		}
 		_, _ = w.Write([]byte(`{"error":"Unauthorized"}`))
 	})
 }

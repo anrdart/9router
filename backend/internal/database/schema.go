@@ -10,9 +10,9 @@ import (
 // tableDef mirrors one entry of TABLES in src/lib/db/schema.js.
 type tableDef struct {
 	name       string
-	columns    []columnDef   // ordered; appended if missing
-	primaryKey string        // appended after columns if non-empty
-	indexes    []indexDef    // created IF NOT EXISTS
+	columns    []columnDef // ordered; appended if missing
+	primaryKey string      // appended after columns if non-empty
+	indexes    []indexDef  // created IF NOT EXISTS
 }
 
 type columnDef struct {
