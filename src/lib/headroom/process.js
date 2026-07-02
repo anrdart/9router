@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { spawn } from "child_process";
+import { spawn, execFileSync } from "child_process";
 import { DATA_DIR } from "@/lib/dataDir.js";
 import { findHeadroomBinary } from "./detect.js";
 
@@ -36,9 +36,41 @@ export function isPidAlive(pid) {
   try { process.kill(pid, 0); return true; } catch { return false; }
 }
 
+// Verify a live pid is ACTUALLY our headroom proxy, not an unrelated process the
+// OS assigned the same pid after ours exited. Pids are recycled aggressively on
+// Linux, so a stale proxy.pid can point at anything (observed: a VS Code renderer
+// reusing pid 3600), which made getManagedPid() report a dead proxy as alive and
+// startHeadroomProxy() falsely return { alreadyRunning: true }. We inspect the
+// process command line and require a "headroom" reference. If we cannot read the
+// cmdline (unsupported platform), we conservatively assume it IS ours so behavior
+// falls back to the previous kill(0)-only check rather than orphaning a real proxy.
+function isHeadroomProcess(pid) {
+  try {
+    if (process.platform === "linux") {
+      const cmdline = fs.readFileSync(`/proc/${pid}/cmdline`, "utf8");
+      return cmdline.toLowerCase().includes("headroom");
+    }
+    if (process.platform === "darwin") {
+      const out = execFileSync("ps", ["-p", String(pid), "-o", "command="], {
+        stdio: ["ignore", "pipe", "ignore"], timeout: 1500,
+      }).toString().toLowerCase();
+      return out.includes("headroom");
+    }
+    // Other platforms: no cheap cmdline probe — keep prior behavior.
+    return true;
+  } catch {
+    // /proc entry gone or ps failed → treat as not-ours so a stale pid clears.
+    return false;
+  }
+}
+
 export function getManagedPid() {
   const pid = readPid();
-  return pid && isPidAlive(pid) ? pid : null;
+  if (!pid || !isPidAlive(pid)) return null;
+  // A live pid that is NOT headroom means the pidfile is stale (pid reused).
+  // Clear it so the next start spawns a fresh proxy instead of no-op'ing.
+  if (!isHeadroomProcess(pid)) { clearPid(); return null; }
+  return pid;
 }
 
 export async function startHeadroomProxy({ port = DEFAULT_PORT } = {}) {

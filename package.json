@@ -16,7 +16,8 @@
     "build:backend": "cd backend && go build -o ../bin/9router-backend ./cmd/server",
     "test:backend": "cd backend && go test ./...",
     "cli:pack": "npm --prefix cli run pack:cli",
-    "cli:publish": "npm --prefix cli run publish:cli"
+    "cli:publish": "npm --prefix cli run publish:cli",
+    "prod:local": "bash scripts/prod-local.sh"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
