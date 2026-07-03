@@ -357,6 +357,36 @@ amp --model "{{model}}"
       { id: "gemini-3.1-pro", name: "Gemini 3.1 Pro", alias: "gemini", defaultValue: "gemini/gemini-3.1-pro" },
     ],
   },
+  zcode: {
+    id: "zcode",
+    name: "ZCode",
+    image: "/providers/glm.png",
+    color: "#3B82F6",
+    description: "Z.ai ZCode agentic coding app — add 9Router as a custom OpenAI-compatible provider",
+    docsUrl: "https://zcode.z.ai/en/docs/configuration",
+    configType: "guide",
+    notes: [
+      { type: "info", text: "ZCode supports custom BYOK providers. Add 9Router as a provider so any model in 9Router works — Claude, Gemini, GPT, GLM and more — not just Z.ai's built-in GLM." },
+      { type: "info", text: "In ZCode, custom providers expose an OpenAI Base URL slot and an Anthropic Base URL slot. Use the OpenAI Base URL below (9Router is OpenAI-compatible)." },
+      { type: "warning", text: "ZCode auto-detects the model list from the base URL. If it doesn't load, use \"Add Model\" and enter the model id shown below manually." },
+    ],
+    modelAliases: ["claude-sonnet-4-6", "claude-opus-4-6-thinking", "gpt-5.5", "gemini-3.1-pro", "glm-4.6"],
+    defaultModels: [
+      { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", alias: "claude-sonnet-4-6", defaultValue: "cc/claude-sonnet-4-6" },
+      { id: "claude-opus-4-6-thinking", name: "Claude Opus 4.6 (Thinking)", alias: "claude-opus-4-6-thinking", defaultValue: "cc/claude-opus-4-6-thinking" },
+      { id: "gpt-5.5", name: "GPT-5.5", alias: "gpt-5.5", defaultValue: "cx/gpt-5.5" },
+      { id: "gemini-3.1-pro", name: "Gemini 3.1 Pro", alias: "gemini-3.1-pro", defaultValue: "gemini/gemini-3.1-pro" },
+      { id: "glm-4.6", name: "GLM-4.6", alias: "glm-4.6", defaultValue: "glm/glm-4.6" },
+    ],
+    guideSteps: [
+      { step: 1, title: "Open Model Settings", desc: "In ZCode, open the model selector → \"Manage Models\" (or the first-launch model screen)." },
+      { step: 2, title: "Add Provider", desc: "Click \"Add Provider\" at the bottom of the provider list and give it a name, e.g. \"9Router\"." },
+      { step: 3, title: "OpenAI Base URL", value: "{{baseUrl}}", copyable: true },
+      { step: 4, title: "API Key", type: "apiKeySelector" },
+      { step: 5, title: "Select Model", type: "modelSelector" },
+      { step: 6, title: "Enable & Save", desc: "Toggle the provider on. If the model list doesn't auto-load, use \"Add Model\" and paste the model id above." },
+    ],
+  },
   // HIDDEN: gemini-cli
   // "gemini-cli": {
   //   id: "gemini-cli",
