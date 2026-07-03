@@ -101,6 +101,32 @@ export function decloakToolNames(body, toolNameMap) {
   return { ...body, content };
 }
 
+// Decloak a single parsed Claude value seen on the streaming passthrough path.
+// Mutates in place and returns true if any cloaked tool name was restored.
+// Handles both framings the passthrough transform encounters:
+//   - a streaming event: { type:"content_block_start", content_block:{type:"tool_use", name} }
+//   - a full message object: { type:"message", content:[{type:"tool_use", name}, ...] }
+// (the latter occurs when the client omits `stream` but internal streaming is on,
+// so the upstream returns one JSON message that flows through the SSE transform).
+export function decloakParsedClaude(parsed, toolNameMap) {
+  if (!toolNameMap?.size || !parsed || typeof parsed !== "object") return false;
+  let changed = false;
+  const cb = parsed.content_block;
+  if (cb?.type === "tool_use" && toolNameMap.has(cb.name)) {
+    cb.name = toolNameMap.get(cb.name);
+    changed = true;
+  }
+  if (Array.isArray(parsed.content)) {
+    for (const block of parsed.content) {
+      if (block?.type === "tool_use" && toolNameMap.has(block.name)) {
+        block.name = toolNameMap.get(block.name);
+        changed = true;
+      }
+    }
+  }
+  return changed;
+}
+
 // CC decoy tools — Claude Code native tool names, marked unavailable
 const CC_DECOY_TOOLS = [
   { name: "Task", description: "This tool is currently unavailable.", input_schema: { type: "object", properties: {} } },
