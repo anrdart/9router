@@ -16,7 +16,8 @@ const nextConfig = {
   // Set NEXT_OUTPUT=default to build a standard .next bundle that `next start` can serve directly —
   // needed for local production runs where standalone's manual file tracing is incomplete
   // (missing native modules / client reference manifests cause "No SQLite driver" and manifest errors).
-  output: process.env.NEXT_OUTPUT || "standalone",
+  // NEXT_OUTPUT=default (or "standard") omits the key entirely → standard .next bundle.
+  output: ["default", "standard"].includes(process.env.NEXT_OUTPUT) ? undefined : (process.env.NEXT_OUTPUT || "standalone"),
   serverExternalPackages: ["better-sqlite3", "sql.js", "node:sqlite", "bun:sqlite"],
   turbopack: {
     root: tracingRoot
