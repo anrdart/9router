@@ -144,6 +144,14 @@ do_start() {
   [ -n "${JWT_SECRET:-}" ] || err "JWT_SECRET unset — dashboard login via Go will 401"
 
   if [ "${SKIP_BUILD:-0}" != "1" ]; then
+    # Rebuilding rewrites .next/ (new asset hashes). A next-start from a prior run
+    # still holds the OLD build in memory → it serves stale hashes (500s) and the
+    # "already running" guards below would keep it alive. Stop our old processes
+    # first so the rebuild never lands under a live server.
+    if pidfile_alive "$NODE_PIDFILE" >/dev/null || pidfile_alive "$GO_PIDFILE" >/dev/null; then
+      log "stopping prior processes before rebuild (avoids stale-.next 500s)"
+      do_stop
+    fi
     log "building Go backend + Next.js (default output)…"
     npm run build:backend
     NEXT_OUTPUT=default NEXT_TELEMETRY_DISABLED=1 npm run build
