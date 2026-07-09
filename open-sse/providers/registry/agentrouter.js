@@ -4,9 +4,12 @@
 // served by the DefaultExecutor with the default "openai" transport format — no custom executor,
 // no translation hop, no identity-spoof headers needed.
 //
-// Model ids are the canonical upstream ids (claude-sonnet-4-5-20250929, gpt-4o, deepseek-r1, …),
-// so pricing + capabilities resolve automatically via the provider-agnostic MODEL_PRICING /
-// capabilities tables. AgentRouter passes provider pricing through with no markup.
+// Model ids are the canonical upstream ids (claude-opus-4-8, gpt-5.5, glm-5.2, …), so pricing +
+// capabilities resolve automatically via the provider-agnostic MODEL_PRICING / capabilities tables.
+// AgentRouter passes provider pricing through with no markup.
+// Catalog verified against https://agentrouter.org/api/pricing (2026-07-09). Per-token access is
+// group-scoped upstream, so the dashboard "refresh models" (GET /v1/models) narrows this static
+// seed to what each key can actually reach — e.g. a default-group key sees only glm-5.2.
 export default {
   id: "agentrouter",
   priority: 105,
@@ -42,16 +45,10 @@ export default {
     },
   },
   models: [
-    { id: "claude-sonnet-4-5-20250929", name: "Claude Sonnet 4.5" },
-    { id: "claude-opus-4-5-20250929", name: "Claude Opus 4.5" },
-    { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5" },
-    { id: "gpt-4o", name: "GPT-4o" },
-    { id: "gpt-4o-mini", name: "GPT-4o Mini" },
-    { id: "glm-4.6", name: "GLM-4.6" },
-    { id: "glm-4.6v", name: "GLM-4.6V (Vision)" },
-    { id: "glm-4.5-air", name: "GLM-4.5 Air" },
-    { id: "deepseek-r1", name: "DeepSeek R1" },
-    { id: "qwen3-coder-480b", name: "Qwen3 Coder 480B" },
-    { id: "gemini-2-0-pro", name: "Gemini 2.0 Pro" },
+    { id: "claude-opus-4-8", name: "Claude Opus 4.8" },
+    { id: "claude-opus-4-7", name: "Claude Opus 4.7" },
+    { id: "claude-opus-4-6", name: "Claude Opus 4.6" },
+    { id: "gpt-5.5", name: "GPT-5.5" },
+    { id: "glm-5.2", name: "GLM-5.2" },
   ],
 };
