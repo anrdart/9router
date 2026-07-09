@@ -77,4 +77,15 @@ describe("model routing", () => {
         model: "gpt-image-1",
       });
   });
+
+  it("strips Claude Code context suffixes before upstream routing", async () => {
+    const ctx = await setupDb();
+    cleanup = ctx.cleanup;
+
+    await expect(ctx.getModelInfo("ar/glm-5.2[1m]"))
+      .resolves.toEqual({
+        provider: "agentrouter",
+        model: "glm-5.2",
+      });
+  });
 });

@@ -24,6 +24,10 @@ export function resolveProviderAlias(aliasOrId) {
   return ALIAS_TO_PROVIDER_ID[aliasOrId] || aliasOrId;
 }
 
+function stripContextSuffix(model) {
+  return typeof model === "string" ? model.replace(/\[[^/\]]+\]$/, "") : model;
+}
+
 /**
  * Parse model string: "alias/model" or "provider/model" or just alias
  */
@@ -36,7 +40,7 @@ export function parseModel(modelStr) {
   if (modelStr.includes("/")) {
     const firstSlash = modelStr.indexOf("/");
     const providerOrAlias = modelStr.slice(0, firstSlash);
-    const model = modelStr.slice(firstSlash + 1);
+    const model = stripContextSuffix(modelStr.slice(firstSlash + 1));
     const provider = resolveProviderAlias(providerOrAlias);
     return { provider, model, isAlias: false, providerAlias: providerOrAlias };
   }
@@ -44,7 +48,7 @@ export function parseModel(modelStr) {
   // Alias format (model alias, not provider alias)
   return {
     provider: null,
-    model: modelStr,
+    model: stripContextSuffix(modelStr),
     isAlias: true,
     providerAlias: null,
   };
@@ -67,7 +71,7 @@ export function resolveModelAliasFromMap(alias, aliases) {
     const providerOrAlias = resolved.slice(0, firstSlash);
     return {
       provider: resolveProviderAlias(providerOrAlias),
-      model: resolved.slice(firstSlash + 1),
+      model: stripContextSuffix(resolved.slice(firstSlash + 1)),
     };
   }
 
@@ -75,7 +79,7 @@ export function resolveModelAliasFromMap(alias, aliases) {
   if (typeof resolved === "object" && resolved.provider && resolved.model) {
     return {
       provider: resolveProviderAlias(resolved.provider),
-      model: resolved.model,
+      model: stripContextSuffix(resolved.model),
     };
   }
 
