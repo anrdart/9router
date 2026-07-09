@@ -78,7 +78,15 @@ const REFRESH_GRANTS = Object.fromEntries(
 
 export class DefaultExecutor extends BaseExecutor {
   constructor(provider) {
-    super(provider, PROVIDERS[provider] || PROVIDERS.openai);
+    let config = PROVIDERS[provider] || PROVIDERS.openai;
+    if (provider === "agentrouter") {
+      config = {
+        ...config,
+        baseUrl: "https://agentrouter.org/v1/chat/completions",
+        headers: { ...(config.headers || {}), "User-Agent": "KiloCode/7.4.1 vscode-extension" },
+      };
+    }
+    super(provider, config);
   }
 
   transformRequest(model, body) {
