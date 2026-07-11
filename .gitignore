@@ -80,9 +80,9 @@ gitbook/README.md
 open-sse.old/
 .graphifyignore
 graphify-out/*
-
 # Go backend build output
 /bin/
 /backend/bin/
 *.test
 
+.next-analyze/*
