@@ -1,4 +1,5 @@
 import { execFileSync, execSync } from "child_process";
+import { readFileSync } from "fs";
 import path from "path";
 
 // Extras that improve headroom compression quality. `proxy` is the base;
@@ -69,13 +70,33 @@ export function findHeadroomBinary() {
 // dashboard probes and install action operate on the same interpreter as the CLI.
 // Falls back to the first version-eligible candidate when headroom-ai is not yet
 // installed anywhere (needed for the initial install).
-// Interpreters to probe, most specific first: the python next to the headroom
-// binary (guaranteed to have headroom-ai), then full paths from EXTRA_BINS, then
-// bare names resolved via PATH.
+// Read the interpreter from a Python console-script shebang (`#!/path/to/python`).
+// pipx / venv / `pip install --user` install the `headroom` entry point as a shim
+// whose interpreter lives in a venv, NOT next to the shim — so the python is not
+// findable by dirname alone. The shebang names it exactly. Skips `/usr/bin/env`
+// launchers (no absolute interpreter to extract). Unix only; Windows uses .exe shims.
+function pythonFromShebang(bin) {
+  if (!bin || IS_WIN) return null;
+  try {
+    const firstLine = readFileSync(bin, "utf8").split("\n", 1)[0];
+    const m = firstLine.match(/^#!\s*(\/\S+)/);
+    if (!m) return null;
+    const interp = m[1];
+    return /\/env$/.test(interp) ? null : interp;
+  } catch {
+    return null;
+  }
+}
+
+// Interpreters to probe, most specific first: the interpreter named in the headroom
+// shim's shebang (the venv python that actually has headroom-ai), then the python
+// next to the headroom binary, then full paths from EXTRA_BINS, then bare names.
 function pythonCandidates() {
   const list = [];
   const bin = findHeadroomBinary();
   if (bin) {
+    const shebangPy = pythonFromShebang(bin);
+    if (shebangPy) list.push(shebangPy);
     const dir = path.dirname(bin);
     const names = IS_WIN ? ["python.exe", "python3.exe"] : ["python3", "python3.13", "python"];
     for (const n of names) list.push(path.join(dir, n));
