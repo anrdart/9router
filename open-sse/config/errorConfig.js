@@ -71,6 +71,16 @@ export const ERROR_RULES = [
   { text: "capacity",   backoff: true, restrictToStatuses: [429, 502, 503, 504, 529] },
   { text: "overloaded", backoff: true, restrictToStatuses: [429, 502, 503, 504, 529] },
 
+  // Content-moderation rejections (e.g. AgentRouter on Claude models) are deterministic: the
+  // SAME prompt will be blocked again, so retrying/backoff is pointless. Some gateways return
+  // these as 500, which would otherwise fall to the default 30s transient lock and freeze the
+  // account for every subsequent request. Fail fast without locking.
+  // Match on the human message text that parseUpstreamError surfaces (json.error.message),
+  // e.g. "sensitive words detected (request id ...)" and "content-blocked (request id ...)".
+  { text: "sensitive word",   shouldFallback: false, cooldownMs: 0 },
+  { text: "content-blocked",  shouldFallback: false, cooldownMs: 0 },
+  { text: "content blocked",  shouldFallback: false, cooldownMs: 0 },
+
   // --- Deterministic client errors: do NOT fall back and do NOT lock the account.
   // A 400/422 means the REQUEST itself is malformed or unsupported (bad param, oversized
   // context, tool-schema error). Retrying the identical request against every other account
