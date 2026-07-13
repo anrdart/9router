@@ -104,3 +104,37 @@ export const COOLDOWN_MS = {
   transient: TRANSIENT_COOLDOWN_MS,
   requestNotAllowed: COOLDOWN.short,
 };
+
+/**
+ * Substring signatures (lowercase) that identify an upstream *content-moderation*
+ * rejection — deterministic for a given prompt+provider, so retrying the SAME
+ * provider is pointless (the whole replayed history is re-scanned every turn).
+ * See open-sse/config/errorConfig.js ERROR_RULES for the no-lock rules.
+ */
+export const MODERATION_SIGNATURES = ["content-blocked", "content blocked", "content_blocked", "sensitive word"];
+
+/** True if an error message looks like a content-moderation rejection. */
+export function isModerationError(errorText) {
+  if (!errorText) return false;
+  const s = String(errorText).toLowerCase();
+  return MODERATION_SIGNATURES.some((sig) => s.includes(sig));
+}
+
+/**
+ * When a provider moderates content (e.g. AgentRouter on Claude/GLM), re-run the
+ * SAME request against a non-moderated provider serving the same model, keeping the
+ * client-facing model name identical (transparent to the client; rescues sessions
+ * whose replayed history already contains the flagged phrase).
+ *
+ * Keyed by source provider id → function mapping the upstream model to a
+ * `provider/model` target, or null when no clean twin exists (then we surface the
+ * original moderation error rather than silently mangle the request).
+ */
+export const MODERATION_FALLBACK = {
+  agentrouter: (model) => {
+    const m = String(model || "");
+    if (/^claude/i.test(m)) return `claude/${m}`;   // ar/claude-opus-4-8 → claude/claude-opus-4-8
+    if (/^glm/i.test(m)) return `glm/${m}`;          // ar/glm-5.2 → glm/glm-5.2
+    return null;                                     // gpt-*/others: no clean twin → don't reroute
+  },
+};

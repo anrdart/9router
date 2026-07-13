@@ -18,6 +18,7 @@ import { errorResponse, unavailableResponse } from "open-sse/utils/error.js";
 import { handleComboChat, handleFusionChat } from "open-sse/services/combo.js";
 import { handleBypassRequest } from "open-sse/utils/bypassHandler.js";
 import { HTTP_STATUS } from "open-sse/config/runtimeConfig.js";
+import { isModerationError, MODERATION_FALLBACK } from "open-sse/config/errorConfig.js";
 import { detectFormatByEndpoint } from "open-sse/translator/formats.js";
 import * as log from "../utils/logger.js";
 import { updateProviderCredentials, checkAndRefreshToken } from "../services/tokenRefresh.js";
@@ -134,7 +135,7 @@ export async function handleChat(request, clientRawRequest = null) {
 /**
  * Handle single model chat request
  */
-async function handleSingleModelChat(body, modelStr, clientRawRequest = null, request = null, apiKey = null) {
+async function handleSingleModelChat(body, modelStr, clientRawRequest = null, request = null, apiKey = null, moderationRerouted = false) {
   const modelInfo = await getModelInfo(modelStr);
 
   // If provider is null, this might be a combo name - check and handle
@@ -270,6 +271,19 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
     });
 
     if (result.success) return result.response;
+
+    // Content-moderation reroute: the upstream (e.g. AgentRouter) rejected the request on a
+    // content filter. This is deterministic for this prompt+provider — every replayed turn of an
+    // existing session re-sends the flagged history, so retrying AgentRouter (any account) blocks
+    // identically forever. Instead re-run the SAME request against a non-moderated provider serving
+    // the same model, keeping the client-facing model name unchanged. Guarded to one hop.
+    if (!moderationRerouted && isModerationError(result.error)) {
+      const remap = MODERATION_FALLBACK[provider]?.(model);
+      if (remap) {
+        log.warn("FALLBACK", `⇄ ${provider}/${model} CONTENT-BLOCKED → reroute ${remap} (session-safe)`);
+        return handleSingleModelChat(body, remap, clientRawRequest, request, apiKey, true);
+      }
+    }
 
     // Mark account unavailable (auto-calculates cooldown with exponential backoff, or precise resetsAtMs)
     const { shouldFallback } = await markAccountUnavailable(credentials.connectionId, result.status, result.error, provider, model, result.resetsAtMs);
