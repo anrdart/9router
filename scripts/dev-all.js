@@ -1,13 +1,13 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 // scripts/dev-all.js
-// Runs the Go backend, the Node engine (open-sse upstream), and the Next.js
-// dashboard together for local development — without any extra npm dependency.
+// Runs the Go backend, the engine (open-sse upstream), and the Next.js dashboard
+// together for local development — without any extra dependency.
 //
 //   go   :20128  (public entry point; native /health, proxies everything else)
 //   node :20129  (open-sse engine, the reverse-proxy upstream)
 //   ui   :20127  (Next.js dashboard dev server)
 //
-// Usage: npm run dev:all
+// Usage: bun run dev:all
 // Stop with Ctrl-C; all three child processes are torn down together.
 
 const { spawn } = require("node:child_process");
@@ -16,6 +16,11 @@ const path = require("node:path");
 const ROOT = path.resolve(__dirname, "..");
 const GO_BIN =
   process.env.GOROOT ? path.join(process.env.GOROOT, "bin", "go") : "go";
+
+// The two Next.js dev servers run under Bun (`bun --bun next ...`) so the whole
+// stack uses one runtime. process.execPath is the bun binary when launched via
+// `bun run dev:all`.
+const BUN_BIN = process.execPath;
 
 const procs = [
   {
@@ -28,8 +33,8 @@ const procs = [
   {
     name: "node",
     color: "\x1b[33m", // yellow
-    cmd: process.execPath,
-    args: ["node_modules/next/dist/bin/next", "dev", "--webpack", "--port", "20129"],
+    cmd: BUN_BIN,
+    args: ["--bun", "next", "dev", "--webpack", "--port", "20129"],
     opts: {
       cwd: ROOT,
       env: { ...process.env, PORT: "20129" },
@@ -38,8 +43,8 @@ const procs = [
   {
     name: "ui",
     color: "\x1b[36m", // cyan
-    cmd: process.execPath,
-    args: ["node_modules/next/dist/bin/next", "dev", "--webpack", "--port", "20127"],
+    cmd: BUN_BIN,
+    args: ["--bun", "next", "dev", "--webpack", "--port", "20127"],
     opts: { cwd: ROOT, env: { ...process.env } },
   },
 ];

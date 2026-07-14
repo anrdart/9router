@@ -174,7 +174,7 @@ Cursor Settings → Models → Advanced:
 # VPSへデプロイ
 git clone https://github.com/decolua/9router.git
 cd 9router/app
-npm install && npm run build
+bun install && bun run build
 npm start
 
 # Nginxリバースプロキシを設定
@@ -198,7 +198,7 @@ npm start
 
 ### Localhost(デフォルト)
 ```bash
-npm install -g 9router
+bun install -g 9router
 9router
 → Dashboard: http://localhost:3000
 → API: http://localhost:20128/v1
@@ -208,7 +208,7 @@ npm install -g 9router
 ```bash
 git clone https://github.com/decolua/9router.git
 cd 9router/app
-npm install && npm run build
+bun install && bun run build
 
 export JWT_SECRET="your-secure-secret"
 export INITIAL_PASSWORD="your-password"
@@ -230,7 +230,7 @@ docker run -d \
 ### Cloudflare Workers
 ```bash
 cd 9router/app
-npm run deploy:cloudflare
+bun run deploy:cloudflare
 ```
 
 **環境変数:**
@@ -294,8 +294,8 @@ npm update -g 9router
 ```bash
 cd 9router/app
 git pull origin main
-npm install
-npm run build
+bun install
+bun run build
 npm start
 ```
 
@@ -346,8 +346,7 @@ docker run -d \
    git checkout -b feature/your-feature
    
    # 変更を加える
-   npm install
-   npm run dev
+   bun install   bun run dev
    
    # テスト
    npm test

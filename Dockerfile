@@ -10,6 +10,7 @@
 
 ARG NODE_IMAGE=node:22-alpine
 ARG GO_IMAGE=golang:1.24-alpine
+ARG BUN_IMAGE=oven/bun:1-alpine
 
 # ---------------------------------------------------------------------------
 # Stage 1: build the Go backend binary.
@@ -26,19 +27,22 @@ ENV CGO_ENABLED=0 GOOS=linux GOTOOLCHAIN=local
 RUN go build -trimpath -ldflags="-s -w" -o /out/9router-backend ./cmd/server
 
 # ---------------------------------------------------------------------------
-# Stage 2: build the Next.js standalone bundle (unchanged from original).
+# Stage 2: build the Next.js standalone bundle with Bun.
 # ---------------------------------------------------------------------------
-FROM ${NODE_IMAGE} AS builder
+FROM ${BUN_IMAGE} AS builder
 WORKDIR /app
+# python3/make/g++ are needed to compile the optional better-sqlite3 native
+# module; Bun builds it because it is in trustedDependencies.
 RUN apk --no-cache upgrade && apk --no-cache add python3 make g++ linux-headers
 
-COPY package.json ./
-RUN --mount=type=cache,target=/root/.npm \
-  npm install
+# Copy the lockfile too so the build is reproducible (frozen lockfile).
+COPY package.json bun.lock ./
+RUN --mount=type=cache,target=/root/.bun/install/cache \
+  bun install --frozen-lockfile
 
 COPY . ./
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
+RUN bun run build
 
 # ---------------------------------------------------------------------------
 # Stage 3: runtime image with both binaries.

@@ -190,9 +190,9 @@ HTTPS interception standalone privileged. DNS-hijack host tool AI (Antigravity/C
 
 Satu app Next.js, dua jalur:
 
-**npm global** (`cli/`): `cli.js` (~831 baris, pure stdlib) supervise Next standalone yang sudah di-build (`cli/app/`). Native deps (better-sqlite3, systray) **sengaja di luar tarball** → lazy-install ke `~/.9router/runtime` (hindari Windows EBUSY lock + AV false-positive).
+**Global CLI** (`cli/`, installed via `bun install -g 9router`): `cli.js` (~831 baris, pure stdlib) supervise Next standalone yang sudah di-build (`cli/app/`). Native deps (better-sqlite3, systray) **sengaja di luar tarball** → lazy-install ke `~/.9router/runtime` via bun (hindari Windows EBUSY lock + AV false-positive).
 - Build: `build-cli.js` (Next standalone, workspace tracing) → `buildMitm.js` (esbuild MITM jadi satu file zero-external, biar bisa di-spawn bebas node_modules lock).
-- Validasi binary by magic bytes (ELF/Mach-O/PE). sql.js `.wasm` re-validate runtime (npm publish strip `.wasm` nested).
+- Validasi binary by magic bytes (ELF/Mach-O/PE). sql.js `.wasm` re-validate runtime (publishing strips nested `.wasm`).
 - Tray: Windows→PowerShell NotifyIcon (no binary, AV-safe); Unix→systray2. Autostart: launchd/Startup `.vbs`/`.desktop`.
 - Crash supervisor: setelah MAX_RESTARTS, set `mitmEnabled=false` (MITM prime suspect) lalu restart.
 
@@ -299,7 +299,7 @@ Sinkronisasi state multi-device lewat `NEXT_PUBLIC_CLOUD_URL` (implementasi clou
 | **Daftar host tool yang dibajak** | `src/shared/constants/mitmToolHosts.js` |
 | **Handler Kiro (AWS EventStream)** | `src/mitm/handlers/kiro.js` |
 | **Cloud sync scheduler/control** | `src/shared/services/cloudSyncScheduler.js`, `src/app/api/sync/cloud/route.js` |
-| **Launcher npm CLI** | `cli/cli.js` |
+| **Launcher CLI** | `cli/cli.js` |
 | **Build pipeline distribusi** | `cli/scripts/build-cli.js` |
 | **Lazy-install runtime deps** | `cli/hooks/sqliteRuntime.js`, `cli/hooks/trayRuntime.js` |
 | **Navigasi/feature-flag UI** | `src/shared/components/Sidebar.js` |

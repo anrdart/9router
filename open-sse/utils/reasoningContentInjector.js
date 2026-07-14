@@ -67,6 +67,11 @@ function applyDeepSeekV4ProAlias({ provider, model, body }) {
   return nextBody;
 }
 
+export function needsReasoningContentTransform(provider, model) {
+  return !!providerRuleFor(provider) || MODEL_RULES.some(r => r.match(model)) ||
+    (provider === "deepseek" && !!DEEPSEEK_V4_PRO_ALIASES[model]);
+}
+
 export function injectReasoningContent({ provider, model, body }) {
   const providerRule = providerRuleFor(provider);
   const modelRule = MODEL_RULES.find(r => r.match(model));

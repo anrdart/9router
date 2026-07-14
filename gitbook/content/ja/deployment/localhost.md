@@ -9,7 +9,7 @@
 npm経由で9Routerをグローバルインストール:
 
 ```bash
-npm install -g 9router
+bun install -g 9router
 ```
 
 **要件:**
@@ -113,7 +113,7 @@ kill -9 <PID>
 
 ```bash
 # sudoを使用 (非推奨)
-sudo npm install -g 9router
+sudo bun install -g 9router
 
 # またはnpm権限を修正 (推奨)
 mkdir ~/.npm-global

@@ -68,7 +68,7 @@
 **1. グローバルインストール：**
 
 ```bash
-npm install -g 9router
+bun install -g 9router
 9router
 ```
 
@@ -95,15 +95,15 @@ Claude Code/Codex/Gemini CLI/OpenClaw/Cursor/Clineの設定:
 
 ```bash
 cp .env.example .env
-npm install
-PORT=20128 NEXT_PUBLIC_BASE_URL=http://localhost:20128 npm run dev
+bun install
+PORT=20128 NEXT_PUBLIC_BASE_URL=http://localhost:20128 bun run dev
 ```
 
 本番モード：
 
 ```bash
-npm run build
-PORT=20128 HOSTNAME=0.0.0.0 NEXT_PUBLIC_BASE_URL=http://localhost:20128 npm run start
+bun run build
+PORT=20128 HOSTNAME=0.0.0.0 NEXT_PUBLIC_BASE_URL=http://localhost:20128 bun run start
 ```
 
 デフォルトURL：
@@ -947,8 +947,8 @@ Model: cc/claude-opus-4-6
 # クローンとインストール
 git clone https://github.com/decolua/9router.git
 cd 9router
-npm install
-npm run build
+bun install
+bun run build
 
 # 設定
 export JWT_SECRET="your-secure-secret-change-this"
@@ -963,11 +963,11 @@ export API_KEY_SECRET="endpoint-proxy-api-key-secret"
 export MACHINE_ID_SALT="endpoint-proxy-salt"
 
 # 起動
-npm run start
+bun run start
 
 # またはPM2を使用
-npm install -g pm2
-pm2 start npm --name 9router -- start
+bun install -g pm2
+pm2 start bun --name 9router -- start
 pm2 save
 pm2 startup
 ```

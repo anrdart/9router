@@ -103,7 +103,7 @@ if (appPkg.version !== cliPkg.version) {
 // Step 1: Build app with Next.js (workspace tracing root → traced node_modules in standalone).
 console.log("1️⃣  Building Next.js app...");
 try {
-  execSync("npm run build", {
+  execSync("bun run build", {
     stdio: "inherit",
     cwd: appDir,
     env: {
@@ -268,6 +268,32 @@ try {
   console.error("❌ MITM build failed");
   process.exit(1);
 }
+
+// Step 9: Cross-compile the native Go front door for published CLI platforms.
+// Pure-Go SQLite keeps this CGO-free. Windows stays on the legacy Next-only path
+// until the executable is signed; unsigned Go binaries trigger common AV tools.
+console.log("9️⃣  Building native Go backends...");
+const goTargets = [
+  ["linux", "amd64"], ["linux", "arm64"],
+  ["darwin", "amd64"], ["darwin", "arm64"],
+];
+const goBinDir = path.join(cliAppDir, "bin");
+fs.mkdirSync(goBinDir, { recursive: true });
+for (const [goos, goarch] of goTargets) {
+  const out = path.join(goBinDir, `${goos}-${goarch}`, "9router-backend");
+  fs.mkdirSync(path.dirname(out), { recursive: true });
+  try {
+    execSync(`go build -trimpath -ldflags="-s -w" -o "${out}" ./cmd/server`, {
+      stdio: "inherit",
+      cwd: path.join(appDir, "backend"),
+      env: { ...process.env, CGO_ENABLED: "0", GOOS: goos, GOARCH: goarch },
+    });
+  } catch {
+    console.error(`❌ Go backend build failed for ${goos}/${goarch}`);
+    process.exit(1);
+  }
+}
+console.log("✅ Native Go backends built (Windows intentionally excluded until signed)\n");
 
 console.log("✨ CLI package build completed!");
 console.log(`📁 Output: ${cliAppDir}`);

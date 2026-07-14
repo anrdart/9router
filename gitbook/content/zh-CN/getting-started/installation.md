@@ -34,7 +34,7 @@ npm --version
 全局安装,任何位置都能使用:
 
 ```bash
-npm install -g 9router
+bun install -g 9router
 ```
 
 **启动 9Router:**
@@ -55,13 +55,13 @@ npm install -g 9router
 ```bash
 mkdir my-9router
 cd my-9router
-npm install 9router
+bun add 9router
 ```
 
 **启动 9Router:**
 
 ```bash
-npx 9router
+bunx 9router
 ```
 
 **优势:**
@@ -76,8 +76,8 @@ npx 9router
 ```bash
 git clone https://github.com/decolua/9router.git
 cd 9router/app
-npm install
-npm run build
+bun install
+bun run build
 npm start
 ```
 
@@ -283,7 +283,7 @@ echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.bashrc
 source ~/.bashrc
 
 # 然后重新安装
-npm install -g 9router
+bun install -g 9router
 ```
 
 ### Node.js 版本过低
@@ -360,7 +360,7 @@ pkill -f 9router
 **或用 PM2 自动重启:**
 
 ```bash
-npm install -g pm2
+bun install -g pm2
 pm2 start 9router --name 9router
 pm2 save
 ```
@@ -372,7 +372,7 @@ pm2 save
 ### 本地开发
 
 ```bash
-npm install -g 9router
+bun install -g 9router
 9router
 ```
 
@@ -382,7 +382,7 @@ npm install -g 9router
 
 ```bash
 # 安装
-npm install -g 9router
+bun install -g 9router
 
 # 配置
 export JWT_SECRET="your-secure-secret"
@@ -390,7 +390,7 @@ export INITIAL_PASSWORD="your-password"
 export NODE_ENV="production"
 
 # 用 PM2 启动
-npm install -g pm2
+bun install -g pm2
 pm2 start 9router --name 9router
 pm2 save
 pm2 startup

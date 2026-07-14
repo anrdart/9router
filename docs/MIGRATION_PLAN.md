@@ -89,15 +89,47 @@ Native read routes are now safe enough to stay in Go:
   proxied `/api/usage/stream` SSE endpoint until the chat pipeline moves to Go.
 
 ### Phase 4 — Native OpenAI-compatible `/v1`
-- `GET /v1/models` (read-only, aggregates DB) — native first.
-- `POST /v1/chat/completions` non-streaming for OpenAI-compatible providers only
-  (~20 standard: openai, openrouter, deepseek, groq, together, …). Feature-flagged,
-  proxied as fallback for unsupported providers.
-- Streaming SSE for those providers.
+- `GET /v1/models` — **DONE ✅** (this branch). Native aggregation of DB combos +
+  custom models + model aliases − disabled, over an embedded static catalog
+  snapshot. Ports `buildModelsList(["llm"])` from `src/app/api/v1/models/route.js`.
+  Transparently reverse-proxies the whole GET to Node **only** when an active
+  connection needs live/network model resolution (kiro/qoder/kimchi/github/
+  clinepass resolvers, or an OpenAI/Anthropic-compatible node with no explicit
+  `enabledModels` and no static catalog) — so parity is exact in every case.
+  Public route (the Node handler has no auth gate); the response exposes only
+  model ids, never connection data or secrets.
+
+  | File | Purpose |
+  |---|---|
+  | `scripts/gen-models-snapshot.mjs` | generator → `models_snapshot.json` (`bun run gen:models-snapshot`) |
+  | `backend/internal/httpapi/models_snapshot.json` | **generated, committed** static catalog (`go:embed`) — do not hand-edit |
+  | `backend/internal/httpapi/models.go` | native `GET /v1/models` + Node-proxy fallback |
+  | `backend/internal/database/repos.go` | `ListCombos`, `KVScope` (customModels/modelAliases/disabledModels) |
+  | `scripts/verify-models-parity.mjs` | diff native Go vs Node id sets (`bun run verify:models-parity`) |
+
+  > **Snapshot upkeep:** `models_snapshot.json` is a generated artifact (like
+  > `open-sse/providers/registry/index.js`). Regenerate with
+  > `bun run gen:models-snapshot` after changing the provider registry or
+  > `open-sse/config/providerModels.js`. The generator asserts its reconstructed
+  > alias map against the live `PROVIDER_ID_TO_ALIAS` and fails loudly on drift.
+  > The Go build stays Node-free (single-binary), so regeneration is manual.
+
+- `POST /v1/chat/completions` — **NATIVE STRICT SLICE ✅**. JSON + SSE for
+  catalogued LLMs on generated, simple OpenAI-compatible transports. Eligibility
+  fails closed: explicit `stream`, plain OpenAI string messages, exactly one API-key
+  account, no OAuth refresh/proxy/relay/token-saver/provider-thinking/model transform.
+  Every unsupported body/provider/account replays its original bytes to Node.
+- Native response normalization matches the existing OpenAI same-format path:
+  required fields, Azure-field stripping, tool finish reason, usage buffer, SSE
+  termination, invalid-id repair, estimated usage when upstream omits it.
 
 ### Phase 5 — Fallback routing + usage logging in Go
-Port `accountFallback.js` (ERROR_RULES, exponential backoff, model-lock) and safe
-usage/request-log writes.
+- **DONE for the native strict slice ✅**: OpenAI error envelopes, current-level
+  exponential backoff, per-model locks/clear-on-success, moderation/client-error
+  no-lock rules, transactional history+daily+lifetime writes, pricing overrides,
+  sanitized/config-bounded request details.
+- Multi-account selection/fallback remains on Node by design; the native gate proxies
+  whenever more than one active account exists.
 
 ### Phase 6 — Cleanup
 Remove/duplicate Next.js route handlers once Go is validated; multi-stage Docker
@@ -106,15 +138,15 @@ build (Go binary serving Next.js static + proxying dynamic to Node).
 ## Run instructions
 
 ### Prerequisites
-- Node 22+ and npm (existing).
+- Bun 1.3+ (`bun --version`) — package manager and JS runtime for the Next.js dashboard/engine.
 - Go 1.24+ (`go version`). If absent, install or run from the local SDK.
 
 ### Local development (three processes)
 ```bash
-npm run dev:all
+bun run dev:all
 ```
 Starts (via `scripts/dev-all.js`, no extra dependency):
-- **go**  `:20128` — public entry point (`npm run dev:backend`)
+- **go**  `:20128` — public entry point (`bun run dev:backend`)
 - **node** `:20129` — open-sse engine, the proxy upstream
 - **ui**  `:20127` — Next.js dashboard
 
@@ -123,11 +155,11 @@ Point clients at `http://localhost:20128/v1` (unchanged).
 ### Individual commands
 | What | Command | Port |
 |---|---|---|
-| Go backend only | `npm run dev:backend` | 20128 |
-| Node engine (upstream) | `npm run dev:node-upstream` | 20129 |
-| Next.js dashboard | `npm run dev` | 20127 |
-| Build Go binary | `npm run build:backend` → `bin/9router-backend` | — |
-| Go tests | `npm run test:backend` | — |
+| Go backend only | `bun run dev:backend` | 20128 |
+| Node engine (upstream) | `bun run dev:node-upstream` | 20129 |
+| Next.js dashboard | `bun run dev` | 20127 |
+| Build Go binary | `bun run build:backend` → `bin/9router-backend` | — |
+| Go tests | `bun run test:backend` | — |
 
 ### Environment (`.env`)
 See `.env.example`. Key additions for the bridge:

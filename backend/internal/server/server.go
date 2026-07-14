@@ -26,6 +26,9 @@ import (
 // so Node handles it unchanged. This means mutations (PATCH/POST/DELETE) to a
 // path that Go only serves as GET are still proxied to Node automatically.
 func New(cfg config.Config, db *database.DB, logger *slog.Logger) (*http.Server, error) {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	rp, err := proxy.Reverse(cfg.NodeUpstream, logger)
 	if err != nil {
 		return nil, err
@@ -38,6 +41,17 @@ func New(cfg config.Config, db *database.DB, logger *slog.Logger) (*http.Server,
 
 	// --- Public native route ------------------------------------------------
 	mux.HandleFunc("GET /health", httpapi.Health)
+
+	// GET /v1/models is public (the Node route has no auth gate) and exposes only
+	// model ids — no connection data or secrets. It serves the embedded static
+	// catalog + DB combos/custom/aliases natively, and reverse-proxies to Node
+	// only when an active connection needs live/network model resolution.
+	mux.Handle("GET /v1/models", httpapi.NewModelsHandler(rp, logger))
+
+	// Native only for the generated, fail-closed OpenAI-compatible slice. The
+	// handler replays the original body to Node whenever translation, multiple
+	// accounts, OAuth refresh, proxy transport, or request transforms are needed.
+	mux.Handle("POST /v1/chat/completions", httpapi.NewChatHandler(rp, logger))
 
 	// --- Protected /api/* reads --------------------------------------------
 	// Each is registered with an exact method so a different method (e.g. PATCH

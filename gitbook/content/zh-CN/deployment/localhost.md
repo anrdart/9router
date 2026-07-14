@@ -9,7 +9,7 @@
 通过 npm 全局安装 9Router:
 
 ```bash
-npm install -g 9router
+bun install -g 9router
 ```
 
 **要求:**
@@ -113,7 +113,7 @@ kill -9 <PID>
 
 ```bash
 # 使用 sudo(不推荐)
-sudo npm install -g 9router
+sudo bun install -g 9router
 
 # 或修复 npm 权限(推荐)
 mkdir ~/.npm-global

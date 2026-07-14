@@ -108,7 +108,9 @@ func (db *DB) ListAPIKeys(ctx context.Context) ([]APIKey, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []APIKey
+	// Non-nil so an empty result serializes as {"keys":[]}, not {"keys":null}
+	// (Node's map() yields []). A dashboard doing keys.map(...) breaks on null.
+	out := []APIKey{}
 	for rows.Next() {
 		k, err := scanAPIKey(rows)
 		if err != nil {
@@ -274,6 +276,89 @@ func (db *DB) ProviderNodeNames(ctx context.Context) map[string]string {
 		}
 	}
 	return out
+}
+
+// ---- Combos -----------------------------------------------------------------
+
+// Combo mirrors the subset of a combos row that /v1/models needs: name and kind.
+// The `models` blob is intentionally not loaded here — the models list only
+// exposes the combo by name, never its member models.
+type Combo struct {
+	Name   string
+	Kind   string // "" | "webSearch" | "webFetch" | ...
+	Models []string
+}
+
+// ListCombos returns combos ordered by createdAt ASC, matching getCombos() in
+// combosRepo.js so /v1/models emits them in the same order Node does.
+func (db *DB) ListCombos(ctx context.Context) ([]Combo, error) {
+	rows, err := db.QueryContext(ctx, "SELECT name, kind FROM combos ORDER BY createdAt ASC")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Combo
+	for rows.Next() {
+		var name string
+		var kind sql.NullString
+		if err := rows.Scan(&name, &kind); err != nil {
+			return nil, err
+		}
+		out = append(out, Combo{Name: name, Kind: kind.String})
+	}
+	return out, rows.Err()
+}
+
+// GetComboByName returns one combo with its ordered member model ids.
+func (db *DB) GetComboByName(ctx context.Context, name string) (Combo, error) {
+	var combo Combo
+	var kind sql.NullString
+	var raw string
+	if err := db.QueryRowContext(ctx, "SELECT name, kind, models FROM combos WHERE name = ?", name).Scan(&combo.Name, &kind, &raw); err != nil {
+		return combo, err
+	}
+	combo.Kind = kind.String
+	if err := json.Unmarshal([]byte(raw), &combo.Models); err != nil {
+		return Combo{}, err
+	}
+	return combo, nil
+}
+
+// ---- KV scopes (customModels / modelAliases / disabledModels) ---------------
+
+// KVPair is one row of a kv scope, value left raw so a single malformed row is
+// contained to its own entry rather than failing the whole read.
+type KVPair struct {
+	Key   string
+	Value json.RawMessage
+}
+
+// KVScope returns all key→value pairs for a kv scope, ordered by key. The
+// callers in /v1/models unmarshal each value into the shape they expect
+// (customModels: object, modelAliases: string, disabledModels: string array),
+// like the parseJson() calls in aliasRepo.js / disabledModelsRepo.js.
+//
+// Order matters: /v1/models builds a last-write-wins kind map while iterating
+// customModels, so a nondeterministic order would flip an emitted entry's
+// capabilities across identical requests. Node's getAll() reads the same rows
+// with no ORDER BY, but the kv table's composite PRIMARY KEY (scope, key) means
+// its `WHERE scope = ?` scan is served from that index in key order — so
+// ORDER BY key is both deterministic for Go and matches Node's effective order.
+func (db *DB) KVScope(ctx context.Context, scope string) ([]KVPair, error) {
+	rows, err := db.QueryContext(ctx, "SELECT key, value FROM kv WHERE scope = ? ORDER BY key ASC", scope)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []KVPair
+	for rows.Next() {
+		var key, value string
+		if err := rows.Scan(&key, &value); err != nil {
+			return nil, err
+		}
+		out = append(out, KVPair{Key: key, Value: json.RawMessage(value)})
+	}
+	return out, rows.Err()
 }
 
 // ---- Usage history ----------------------------------------------------------

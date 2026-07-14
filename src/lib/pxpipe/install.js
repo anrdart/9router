@@ -9,13 +9,13 @@ const INSTALL_LOG = path.join(PXPIPE_DIR, "install.log");
 const INSTALL_TIMEOUT_MS = 5 * 60 * 1000;
 
 const IS_WIN = process.platform === "win32";
-const NPM_CMD = IS_WIN ? "npm.cmd" : "npm";
+const BUN_CMD = IS_WIN ? "bun.exe" : "bun";
 
 // Same PATH extension trick as headroom/detect.js: packaged/launchd environments
-// often miss the Node bin dirs.
+// often miss the runtime bin dirs (bun installs to ~/.bun/bin).
 const EXTRA_BINS = IS_WIN
-  ? [`${process.env.ProgramFiles || ""}\\nodejs`, `${process.env.APPDATA || ""}\\npm`]
-  : ["/usr/local/bin", "/opt/homebrew/bin", `${process.env.HOME || ""}/.local/bin`, "/usr/bin", "/bin"];
+  ? [`${process.env.USERPROFILE || ""}\\.bun\\bin`, `${process.env.ProgramFiles || ""}\\nodejs`]
+  : [`${process.env.HOME || ""}/.bun/bin`, "/usr/local/bin", "/opt/homebrew/bin", `${process.env.HOME || ""}/.local/bin`, "/usr/bin", "/bin"];
 const EXTENDED_PATH = [...EXTRA_BINS, process.env.PATH || ""].filter(Boolean).join(path.delimiter);
 
 let installInFlight = null;
@@ -33,8 +33,10 @@ export function libraryEntry() {
 }
 
 export function findNpm() {
+  // Resolve the bun binary on the (extended) PATH. Named findNpm for backward
+  // compatibility with existing importers; it now locates bun.
   try {
-    const out = execSync(`${IS_WIN ? "where" : "which"} npm`, {
+    const out = execSync(`${IS_WIN ? "where" : "which"} ${BUN_CMD}`, {
       stdio: ["ignore", "pipe", "ignore"],
       windowsHide: true,
       env: { ...process.env, PATH: EXTENDED_PATH },
@@ -72,9 +74,9 @@ export function installPxpipe() {
 }
 
 async function runInstall() {
-  const npm = findNpm();
-  if (!npm) {
-    const err = new Error("npm not found on PATH — Node.js/npm is required to install PXPIPE");
+  const bun = findNpm();
+  if (!bun) {
+    const err = new Error("bun not found on PATH — Bun is required to install PXPIPE");
     err.code = "NPM_NOT_FOUND";
     throw err;
   }
@@ -86,10 +88,10 @@ async function runInstall() {
   }
 
   const outFd = fs.openSync(INSTALL_LOG, "a");
-  fs.writeSync(outFd, `\n[${new Date().toISOString()}] npm install ${PXPIPE_PACKAGE}@latest\n`);
+  fs.writeSync(outFd, `\n[${new Date().toISOString()}] bun install ${PXPIPE_PACKAGE}@latest\n`);
 
   await new Promise((resolve, reject) => {
-    const child = spawn(npm, ["install", `${PXPIPE_PACKAGE}@latest`, "--no-audit", "--no-fund", "--omit=dev"], {
+    const child = spawn(bun, ["install", `${PXPIPE_PACKAGE}@latest`, "--production"], {
       cwd: PXPIPE_DIR,
       stdio: ["ignore", outFd, outFd],
       windowsHide: true,
@@ -97,13 +99,13 @@ async function runInstall() {
     });
     const timer = setTimeout(() => {
       child.kill("SIGKILL");
-      reject(new Error("npm install timed out after 5 minutes — see install.log"));
+      reject(new Error("bun install timed out after 5 minutes — see install.log"));
     }, INSTALL_TIMEOUT_MS);
     child.once("error", (e) => { clearTimeout(timer); reject(e); });
     child.once("exit", (code) => {
       clearTimeout(timer);
       if (code === 0) resolve();
-      else reject(new Error(`npm install exited with code ${code} — see install.log`));
+      else reject(new Error(`bun install exited with code ${code} — see install.log`));
     });
   }).finally(() => fs.closeSync(outFd));
 

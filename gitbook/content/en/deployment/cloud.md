@@ -23,13 +23,13 @@ cd 9router/app
 ### Step 2: Install Dependencies
 
 ```bash
-npm install
+bun install
 ```
 
 ### Step 3: Build Application
 
 ```bash
-npm run build
+bun run build
 ```
 
 ### Step 4: Configure Environment Variables
@@ -63,7 +63,7 @@ sudo chown $USER:$USER /var/lib/9router
 ### Step 6: Start Application
 
 ```bash
-npm run start
+bun run start
 ```
 
 ### Step 7: Setup PM2 for Production
@@ -72,10 +72,10 @@ PM2 keeps your application running and restarts it on crashes:
 
 ```bash
 # Install PM2 globally
-npm install -g pm2
+bun install -g pm2
 
 # Start 9Router with PM2
-pm2 start npm --name 9router -- start
+pm2 start bun --name 9router -- start
 
 # Save PM2 configuration
 pm2 save
@@ -121,13 +121,13 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies
-RUN npm ci --only=production
+RUN bun install --frozen-lockfile --production
 
 # Copy application files
 COPY . .
 
 # Build application
-RUN npm run build
+RUN bun run build
 
 # Expose ports
 EXPOSE 3000 20128
@@ -366,8 +366,8 @@ sudo apt update && sudo apt upgrade -y
 # Update 9Router
 cd /path/to/9router/app
 git pull
-npm install
-npm run build
+bun install
+bun run build
 pm2 restart 9router
 ```
 

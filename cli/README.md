@@ -37,14 +37,14 @@
 
 ## ⚡ Quick Start
 
-**Option 1 — npm (recommended for desktop):**
+**Option 1 — Bun (recommended for desktop):**
 
 ```bash
-npm install -g 9router
+bun install -g 9router
 9router
 
-# Or run directly with npx
-npx 9router
+# Or run directly, without a global install
+bunx 9router
 ```
 
 **Option 2 — Docker (server/VPS):**

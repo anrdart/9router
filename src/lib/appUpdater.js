@@ -156,12 +156,12 @@ export async function killAppProcesses() {
   }
 }
 
-// Resolve npx/9router binary to relaunch after update (cross-platform)
+// Resolve bunx/9router binary to relaunch after update (cross-platform)
 function resolveRelaunchCommand() {
   const isWin = process.platform === "win32";
-  // Prefer `npx 9router` — works regardless of global bin path changes after npm i -g
-  const npx = isWin ? "npx.cmd" : "npx";
-  return { cmd: npx, args: [UPDATER_CONFIG.npmPackageName] };
+  // Prefer `bunx 9router` — works regardless of global bin path changes after bun i -g
+  const bunx = isWin ? "bunx.exe" : "bunx";
+  return { cmd: bunx, args: [UPDATER_CONFIG.npmPackageName] };
 }
 
 // Spawn detached headless updater (Node process) then exit current server

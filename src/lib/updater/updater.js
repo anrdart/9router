@@ -131,11 +131,11 @@ function sleep(ms) {
 function runInstall() {
   state.attempt += 1;
   setPhase("installing");
-  pushLog(`[updater] attempt ${state.attempt}/${maxRetries} — npm i -g ${packageName} --prefer-online`);
+  pushLog(`[updater] attempt ${state.attempt}/${maxRetries} — bun i -g ${packageName}`);
 
   const isWin = process.platform === "win32";
-  const cmd = isWin ? "npm.cmd" : "npm";
-  const args = ["i", "-g", packageName, "--prefer-online"];
+  const cmd = isWin ? "bun.exe" : "bun";
+  const args = ["i", "-g", packageName];
 
   const child = spawn(cmd, args, {
     stdio: ["ignore", "pipe", "pipe"],

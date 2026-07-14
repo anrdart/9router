@@ -153,8 +153,8 @@ do_start() {
       do_stop
     fi
     log "building Go backend + Next.js (default output)…"
-    npm run build:backend
-    NEXT_OUTPUT=default NEXT_TELEMETRY_DISABLED=1 npm run build
+    bun run build:backend
+    NEXT_OUTPUT=default NEXT_TELEMETRY_DISABLED=1 bun run build
   else
     log "SKIP_BUILD=1 → using existing bin/ and .next/"
   fi
@@ -164,7 +164,7 @@ do_start() {
     log "node upstream already running (pid $(cat "$NODE_PIDFILE"))"
   else
     log "starting node upstream on 127.0.0.1:$NODE_PORT"
-    NODE_ENV=production nohup node node_modules/next/dist/bin/next start \
+    NODE_ENV=production nohup bun --bun next start \
       --port "$NODE_PORT" -H 127.0.0.1 >"$NODE_LOG" 2>&1 &
     echo $! >"$NODE_PIDFILE"
   fi

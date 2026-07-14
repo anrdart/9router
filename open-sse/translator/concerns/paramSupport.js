@@ -29,6 +29,12 @@ function matches(rule, model) {
   return typeof rule.match === "function" ? rule.match(model) : rule.match.test(model);
 }
 
+// Snapshot generators use this to keep runtimes that do not port these transforms
+// fail-closed for affected provider/model pairs.
+export function hasPotentialParamTransform(provider, model) {
+  return STRIP_RULES.some(rule => (!rule.provider || rule.provider === provider) && matches(rule, model));
+}
+
 function clampNumber(body, key, ceiling) {
   if (typeof body[key] === "number" && Number.isFinite(body[key]) && body[key] > ceiling) {
     body[key] = ceiling;

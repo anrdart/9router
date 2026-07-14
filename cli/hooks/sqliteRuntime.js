@@ -1,5 +1,5 @@
 // Ensure better-sqlite3 is installed in USER_DATA_DIR/runtime/node_modules
-// (user-writable, avoids Windows EBUSY locks during npm i -g updates).
+// (user-writable, avoids Windows EBUSY locks during `bun i -g` updates).
 // sql.js is bundled in bin/app already; node:sqlite / bun:sqlite are built-in.
 const { execSync, spawnSync } = require("child_process");
 const fs = require("fs");
@@ -28,7 +28,7 @@ function ensureRuntimeDir() {
   const dir = getRuntimeDir();
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-  // Minimal package.json so npm treats it as a project root
+  // Minimal package.json so the package manager treats it as a project root
   const pkgPath = path.join(dir, "package.json");
   if (!fs.existsSync(pkgPath)) {
     fs.writeFileSync(pkgPath, JSON.stringify({
@@ -61,24 +61,29 @@ function isBetterSqliteBinaryValid() {
   } catch { return false; }
 }
 
-// Extract a short, user-friendly reason from npm stderr.
+// Extract a short, user-friendly reason from bun stderr.
 function summarizeNpmError(stderr = "") {
   const text = String(stderr);
-  if (/ENOTFOUND|ETIMEDOUT|EAI_AGAIN|network|getaddrinfo/i.test(text)) return "No internet connection or registry unreachable";
+  if (/ENOTFOUND|ETIMEDOUT|EAI_AGAIN|network|getaddrinfo|failed to (resolve|download)/i.test(text)) return "No internet connection or registry unreachable";
   if (/EACCES|EPERM|permission denied/i.test(text)) return "Permission denied (check folder permissions)";
   if (/ENOSPC|no space/i.test(text)) return "Not enough disk space";
-  if (/node-gyp|gyp ERR|python|MSBuild|Visual Studio|Xcode/i.test(text)) return "Missing build tools (Xcode CLT / Python / VS Build Tools)";
-  if (/ETARGET|version.*not found/i.test(text)) return "Package version not found on registry";
-  const m = text.match(/npm ERR! (.+)/);
+  if (/node-gyp|gyp ERR|python|MSBuild|Visual Studio|Xcode|node-api|prebuild/i.test(text)) return "Missing build tools (Xcode CLT / Python / VS Build Tools)";
+  if (/ETARGET|version.*not found|No version matching/i.test(text)) return "Package version not found on registry";
+  const m = text.match(/(?:npm ERR!|error:) (.+)/i);
   if (m) return m[1].slice(0, 200);
   const lastLine = text.trim().split(/\r?\n/).filter(Boolean).pop();
   return lastLine ? lastLine.slice(0, 200) : "Unknown error";
 }
 
+// Install packages into the user-writable runtime dir with Bun. `bun add` saves
+// to the runtime package.json and builds trusted native modules (better-sqlite3,
+// systray2 are on Bun's default-trusted list); `--no-save` is used for optional
+// installs we don't want persisted. Bun has no --no-audit/--no-fund/--prefer-online
+// equivalents (it never audits and always checks the registry), so they are dropped.
 function runNpmInstall({ cwd, pkgs, extraArgs = [], timeout = 180000 }) {
-  const args = ["install", ...pkgs, "--no-audit", "--no-fund", "--prefer-online", ...extraArgs];
-  const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
-  const res = spawnSync(npmCmd, args, {
+  const args = ["add", ...pkgs, ...extraArgs];
+  const bunCmd = process.platform === "win32" ? "bun.exe" : "bun";
+  const res = spawnSync(bunCmd, args, {
     cwd,
     stdio: ["ignore", "pipe", "pipe"],
     timeout,
@@ -97,13 +102,13 @@ function npmInstall(pkgs, opts = {}) {
     const reason = summarizeNpmError(res.stderr);
     console.warn("⚠️  SQLite engine install failed — using fallback");
     console.warn(`   Reason: ${reason}`);
-    console.warn(`   Retry:  cd "${cwd}" && npm install ${pkgs.join(" ")}`);
+    console.warn(`   Retry:  cd "${cwd}" && bun add ${pkgs.join(" ")}`);
   }
   return res.ok;
 }
 
 // Public: ensure better-sqlite3 native module is installed in user-writable
-// runtime dir. sql.js may be bundled in bin/app, but npm publish strips .wasm
+// runtime dir. sql.js may be bundled in bin/app, but publishing strips .wasm
 // from nested node_modules — verify and reinstall if missing. node:sqlite is
 // built-in. This is purely a *speed optimization* — app works without
 // better-sqlite3 via fallbacks.

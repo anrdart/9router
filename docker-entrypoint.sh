@@ -27,13 +27,24 @@ NODE_PID=$!
 
 # --- Cleanup: stop the Node engine when Go exits -------------------------
 cleanup() {
+  trap - EXIT INT TERM
+  if [ -n "${GO_PID:-}" ] && kill -0 "$GO_PID" 2>/dev/null; then
+    echo "[entrypoint] stopping Go backend (pid $GO_PID)"
+    kill -TERM "$GO_PID" 2>/dev/null || true
+    wait "$GO_PID" 2>/dev/null || true
+  fi
   if kill -0 "$NODE_PID" 2>/dev/null; then
     echo "[entrypoint] stopping Node engine (pid $NODE_PID)"
     kill -TERM "$NODE_PID" 2>/dev/null || true
     wait "$NODE_PID" 2>/dev/null || true
   fi
 }
-trap cleanup EXIT INT TERM
+shutdown() {
+  cleanup
+  exit 0
+}
+trap cleanup EXIT
+trap shutdown INT TERM
 
 # --- 2) Wait for Node to be ready before starting Go ---------------------
 # The Go reverse proxy returns 502 if the upstream is not yet up. Wait briefly
@@ -55,13 +66,12 @@ while [ "$i" -lt 50 ]; do
   sleep 0.2
 done
 
-# --- 3) Hand off to the Go backend (foreground) --------------------------
-# Go serves the public port and proxies to Node. Receiving SIGINT/SIGTERM here
-# (e.g. `docker stop`) triggers Go's graceful shutdown, then our trap stops Node.
-#
-# The Go backend binds loopback by default (defense-in-depth). Inside the
-# container it MUST bind all interfaces so the published port (-p host:20128)
-# reaches it; the dashboard auth guard (JWT/CLI token) is the access control.
-# An explicit GO_HOST in the environment still wins.
+# --- 3) Start the Go backend and supervise both processes -----------------
+# Keep this shell as PID 1 so its trap can gracefully stop BOTH children.
+# The Go backend binds loopback by default; containers explicitly expose it.
 echo "[entrypoint] starting Go backend on :${PORT:-20128} (proxy -> :${NODE_PORT})"
-exec su-exec node env GO_HOST="${GO_HOST:-0.0.0.0}" /usr/local/bin/9router-backend
+su-exec node env GO_HOST="${GO_HOST:-0.0.0.0}" /usr/local/bin/9router-backend &
+GO_PID=$!
+GO_STATUS=0
+wait "$GO_PID" || GO_STATUS=$?
+exit "$GO_STATUS"

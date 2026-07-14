@@ -21,15 +21,15 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v6
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 24
+          bun-version: latest
 
       - name: Install deps
-        run: npm install --no-audit --no-fund
+        run: bun install --frozen-lockfile
 
       - name: Build static export
-        run: npm run build
+        run: bun run build
         env:
           NODE_ENV: production
           NEXT_PUBLIC_BASE_PATH: ""

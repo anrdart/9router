@@ -79,7 +79,7 @@ function npmInstall(pkgs, { silent = false } = {}) {
     const reason = summarizeNpmError(res.stderr);
     console.warn("⚠️  System tray install failed — tray disabled");
     console.warn(`   Reason: ${reason}`);
-    console.warn(`   Retry:  cd "${cwd}" && npm install ${pkgs.join(" ")}`);
+    console.warn(`   Retry:  cd "${cwd}" && bun add ${pkgs.join(" ")}`);
   }
   return res.ok;
 }
