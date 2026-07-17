@@ -79,13 +79,22 @@ pidfile_alive() {
   return 1
 }
 
-wait_health() { # wait_health URL LABEL
-  local url="$1" label="$2" i
+wait_health() { # wait_health URL LABEL [PIDFILE] [LOGFILE]
+  local url="$1" label="$2" pidfile="${3:-}" logfile="${4:-}" i
   for i in $(seq 1 60); do
     curl -sf -m2 -o /dev/null "$url" && { log "$label ready"; return 0; }
+    # Fail fast if the process we're waiting on already died (e.g. a Linux
+    # binary that can't exec on macOS) instead of burning the full 30s.
+    if [ -n "$pidfile" ] && ! pidfile_alive "$pidfile" >/dev/null; then
+      err "$label process exited before becoming healthy"
+      [ -n "$logfile" ] && [ -f "$logfile" ] && { err "last lines of $logfile:"; tail -n 20 "$logfile" >&2; }
+      return 1
+    fi
     sleep 0.5
   done
-  err "$label did not become healthy at $url"; return 1
+  err "$label did not become healthy at $url"
+  [ -n "$logfile" ] && [ -f "$logfile" ] && { err "last lines of $logfile:"; tail -n 20 "$logfile" >&2; }
+  return 1
 }
 
 # --- Headroom (Token Saver) --------------------------------------------------
@@ -194,7 +203,7 @@ do_start() {
       --port "$NODE_PORT" -H 127.0.0.1 >"$NODE_LOG" 2>&1 &
     echo $! >"$NODE_PIDFILE"
   fi
-  wait_health "http://127.0.0.1:$NODE_PORT/api/health" "node upstream"
+  wait_health "http://127.0.0.1:$NODE_PORT/api/health" "node upstream" "$NODE_PIDFILE" "$NODE_LOG"
 
   # 2) Go front-door (loopback). GO_HOST default is 127.0.0.1 in the binary.
   if pidfile_alive "$GO_PIDFILE" >/dev/null; then
@@ -205,7 +214,7 @@ do_start() {
       nohup ./bin/9router-backend >"$GO_LOG" 2>&1 &
     echo $! >"$GO_PIDFILE"
   fi
-  wait_health "http://127.0.0.1:$GO_PORT/health" "go front-door"
+  wait_health "http://127.0.0.1:$GO_PORT/health" "go front-door" "$GO_PIDFILE" "$GO_LOG"
 
   # 3) Headroom (opt-in). A DB value like http://headroom:8787 (a Docker service
   # name) is not loopback, so the dashboard marks it "External" and disables
