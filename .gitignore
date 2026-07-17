@@ -86,4 +86,11 @@ graphify-out/*
 /backend/bin/
 *.test
 
+# Local-only working dirs (notes, vendored repos, scripts, skills)
+.claude/
+.docs/
+.repo/
+.script/
+.codegraph/
+.PR/
 .next-analyze/*
