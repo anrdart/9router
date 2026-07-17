@@ -54,6 +54,7 @@ docs/*
 !docs/release-*.md
 !docs/MIGRATION_AUDIT.md
 !docs/MIGRATION_PLAN.md
+!docs/superpowers/
 test/*
 open-sse/test/*
 RM.vn.md
