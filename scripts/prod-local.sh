@@ -45,8 +45,30 @@ HEADROOM_PORT="${HEADROOM_PORT:-8787}"
 log()  { printf '\033[36m[prod-local]\033[0m %s\n' "$*"; }
 err()  { printf '\033[31m[prod-local]\033[0m %s\n' "$*" >&2; }
 
-# port_busy PORT -> 0 if something is LISTENing on it
-port_busy() { ss -ltn "sport = :$1" 2>/dev/null | grep -q LISTEN; }
+# port_busy PORT -> 0 if something is LISTENing on it.
+# ss is Linux-only; fall back to lsof (macOS/BSD) so the guard actually works there.
+port_busy() {
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltn "sport = :$1" 2>/dev/null | grep -q LISTEN
+  elif command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1
+  else
+    return 1   # no probe available → assume free (best effort)
+  fi
+}
+
+# list_listeners PORT... -> print LISTEN sockets on the given ports (portable).
+list_listeners() {
+  if command -v ss >/dev/null 2>&1; then
+    local expr=""
+    for p in "$@"; do expr="${expr:+$expr or }sport = :$p"; done
+    ss -ltn "$expr" 2>/dev/null
+  elif command -v lsof >/dev/null 2>&1; then
+    local args=() p
+    for p in "$@"; do args+=(-iTCP:"$p"); done
+    lsof -nP "${args[@]}" -sTCP:LISTEN 2>/dev/null
+  fi
+}
 
 # pidfile_alive FILE -> echoes pid if the recorded process is still alive
 pidfile_alive() {
@@ -80,7 +102,11 @@ headroom_managed_pid() {
   [ -f "$pf" ] || return 1
   pid="$(cat "$pf" 2>/dev/null || true)"
   [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null || { rm -f "$pf"; return 1; }
-  if grep -qai headroom "/proc/$pid/cmdline" 2>/dev/null; then echo "$pid"; return 0; fi
+  # Linux: /proc/<pid>/cmdline. macOS/BSD: no procfs — use `ps -o command`.
+  if grep -qai headroom "/proc/$pid/cmdline" 2>/dev/null \
+     || ps -p "$pid" -o command= 2>/dev/null | grep -qai headroom; then
+    echo "$pid"; return 0
+  fi
   rm -f "$pf"; return 1   # stale (pid reused by another process)
 }
 
@@ -208,7 +234,7 @@ do_stop() {
 }
 
 do_status() {
-  log "listeners:"; ss -ltn "sport = :$GO_PORT or sport = :$NODE_PORT" 2>/dev/null | sed 's/^/  /' || true
+  log "listeners:"; list_listeners "$GO_PORT" "$NODE_PORT" | sed 's/^/  /' || true
   curl -s -m3 -o /dev/null -w "  go   /health          -> %{http_code}\n" "http://127.0.0.1:$GO_PORT/health"     || echo "  go   unreachable"
   curl -s -m3 -o /dev/null -w "  node /api/health      -> %{http_code}\n" "http://127.0.0.1:$NODE_PORT/api/health" || echo "  node unreachable"
   [ -f .env ] && { set -a; . ./.env; set +a; }
