@@ -214,7 +214,10 @@ do_start() {
       nohup ./bin/9router-backend >"$GO_LOG" 2>&1 &
     echo $! >"$GO_PIDFILE"
   fi
-  wait_health "http://127.0.0.1:$GO_PORT/health" "go front-door" "$GO_PIDFILE" "$GO_LOG"
+  if ! wait_health "http://127.0.0.1:$GO_PORT/health" "go front-door" "$GO_PIDFILE" "$GO_LOG"; then
+    [ "$(uname -s)" = "Darwin" ] && err "on macOS this is usually a cross-platform checkout — run: bun run doctor:macos --fix"
+    exit 1
+  fi
 
   # 3) Headroom (opt-in). A DB value like http://headroom:8787 (a Docker service
   # name) is not loopback, so the dashboard marks it "External" and disables
