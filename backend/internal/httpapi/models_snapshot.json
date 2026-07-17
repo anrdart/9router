@@ -406,7 +406,6 @@
         "name": "Claude Fable 5",
         "kind": "llm",
         "upstreamId": "blackboxai/anthropic/claude-fable-5",
-        "nativeChat": true,
         "pricing": {
           "input": 10,
           "output": 50,
@@ -433,7 +432,6 @@
         "name": "Claude Sonnet 4.6",
         "kind": "llm",
         "upstreamId": "blackboxai/anthropic/claude-sonnet-4.6",
-        "nativeChat": true,
         "pricing": {
           "input": 3,
           "output": 15,
@@ -2712,6 +2710,18 @@
     ],
     "gcli": [
       {
+        "id": "grok-build",
+        "name": "Grok Build",
+        "kind": "llm",
+        "pricing": {
+          "input": 0.5,
+          "output": 2,
+          "cached": 0.25,
+          "reasoning": 3,
+          "cache_creation": 0.5
+        }
+      },
+      {
         "id": "grok-4.5",
         "name": "Grok 4.5",
         "kind": "llm",
@@ -3749,6 +3759,45 @@
         }
       },
       {
+        "id": "gpt-5.6-sol",
+        "name": "GPT 5.6 Sol",
+        "kind": "llm",
+        "upstreamId": "gpt-5.6-sol",
+        "pricing": {
+          "input": 5,
+          "output": 30,
+          "cached": 0.5,
+          "reasoning": 30,
+          "cache_creation": 5
+        }
+      },
+      {
+        "id": "gpt-5.6-terra",
+        "name": "GPT 5.6 Terra",
+        "kind": "llm",
+        "upstreamId": "gpt-5.6-terra",
+        "pricing": {
+          "input": 2.5,
+          "output": 15,
+          "cached": 0.25,
+          "reasoning": 15,
+          "cache_creation": 2.5
+        }
+      },
+      {
+        "id": "gpt-5.6-luna",
+        "name": "GPT 5.6 Luna",
+        "kind": "llm",
+        "upstreamId": "gpt-5.6-luna",
+        "pricing": {
+          "input": 1,
+          "output": 6,
+          "cached": 0.1,
+          "reasoning": 6,
+          "cache_creation": 1
+        }
+      },
+      {
         "id": "claude-sonnet-5-thinking",
         "name": "Claude Sonnet 5 (Thinking)",
         "kind": "llm",
@@ -3782,6 +3831,45 @@
           "cached": 0.1,
           "reasoning": 5,
           "cache_creation": 1.25
+        }
+      },
+      {
+        "id": "gpt-5.6-sol-thinking",
+        "name": "GPT 5.6 Sol (Thinking)",
+        "kind": "llm",
+        "upstreamId": "gpt-5.6-sol",
+        "pricing": {
+          "input": 2.5,
+          "output": 15,
+          "cached": 0.25,
+          "reasoning": 15,
+          "cache_creation": 2.5
+        }
+      },
+      {
+        "id": "gpt-5.6-terra-thinking",
+        "name": "GPT 5.6 Terra (Thinking)",
+        "kind": "llm",
+        "upstreamId": "gpt-5.6-terra",
+        "pricing": {
+          "input": 2.5,
+          "output": 15,
+          "cached": 0.25,
+          "reasoning": 15,
+          "cache_creation": 2.5
+        }
+      },
+      {
+        "id": "gpt-5.6-luna-thinking",
+        "name": "GPT 5.6 Luna (Thinking)",
+        "kind": "llm",
+        "upstreamId": "gpt-5.6-luna",
+        "pricing": {
+          "input": 2.5,
+          "output": 15,
+          "cached": 0.25,
+          "reasoning": 15,
+          "cache_creation": 2.5
         }
       },
       {
@@ -3821,6 +3909,45 @@
         }
       },
       {
+        "id": "gpt-5.6-sol-agentic",
+        "name": "GPT 5.6 Sol (Agentic)",
+        "kind": "llm",
+        "upstreamId": "gpt-5.6-sol",
+        "pricing": {
+          "input": 2.5,
+          "output": 15,
+          "cached": 0.25,
+          "reasoning": 15,
+          "cache_creation": 2.5
+        }
+      },
+      {
+        "id": "gpt-5.6-terra-agentic",
+        "name": "GPT 5.6 Terra (Agentic)",
+        "kind": "llm",
+        "upstreamId": "gpt-5.6-terra",
+        "pricing": {
+          "input": 2.5,
+          "output": 15,
+          "cached": 0.25,
+          "reasoning": 15,
+          "cache_creation": 2.5
+        }
+      },
+      {
+        "id": "gpt-5.6-luna-agentic",
+        "name": "GPT 5.6 Luna (Agentic)",
+        "kind": "llm",
+        "upstreamId": "gpt-5.6-luna",
+        "pricing": {
+          "input": 2.5,
+          "output": 15,
+          "cached": 0.25,
+          "reasoning": 15,
+          "cache_creation": 2.5
+        }
+      },
+      {
         "id": "claude-sonnet-5-thinking-agentic",
         "name": "Claude Sonnet 5 (Thinking + Agentic)",
         "kind": "llm",
@@ -3854,6 +3981,45 @@
           "cached": 0.1,
           "reasoning": 5,
           "cache_creation": 1.25
+        }
+      },
+      {
+        "id": "gpt-5.6-sol-thinking-agentic",
+        "name": "GPT 5.6 Sol (Thinking + Agentic)",
+        "kind": "llm",
+        "upstreamId": "gpt-5.6-sol",
+        "pricing": {
+          "input": 2.5,
+          "output": 15,
+          "cached": 0.25,
+          "reasoning": 15,
+          "cache_creation": 2.5
+        }
+      },
+      {
+        "id": "gpt-5.6-terra-thinking-agentic",
+        "name": "GPT 5.6 Terra (Thinking + Agentic)",
+        "kind": "llm",
+        "upstreamId": "gpt-5.6-terra",
+        "pricing": {
+          "input": 2.5,
+          "output": 15,
+          "cached": 0.25,
+          "reasoning": 15,
+          "cache_creation": 2.5
+        }
+      },
+      {
+        "id": "gpt-5.6-luna-thinking-agentic",
+        "name": "GPT 5.6 Luna (Thinking + Agentic)",
+        "kind": "llm",
+        "upstreamId": "gpt-5.6-luna",
+        "pricing": {
+          "input": 2.5,
+          "output": 15,
+          "cached": 0.25,
+          "reasoning": 15,
+          "cache_creation": 2.5
         }
       }
     ],
@@ -5792,6 +5958,19 @@
           "reasoning": 3,
           "cache_creation": 0.5
         }
+      },
+      {
+        "id": "grok-imagine-video",
+        "name": "Grok Imagine Video",
+        "kind": "llm",
+        "nativeChat": true,
+        "pricing": {
+          "input": 0.5,
+          "output": 2,
+          "cached": 0.25,
+          "reasoning": 3,
+          "cache_creation": 0.5
+        }
       }
     ],
     "xiaomi-mimo": [
@@ -7356,7 +7535,8 @@
       "llm",
       "imageToText",
       "webSearch",
-      "image"
+      "image",
+      "video"
     ],
     "xiaomi-mimo": [
       "llm"
