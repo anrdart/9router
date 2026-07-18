@@ -6107,28 +6107,131 @@
     ],
     "tokenrouter": [
       {
-        "id": "auto:balance",
-        "name": "Auto — Balance (cost/quality)",
+        "id": "anthropic/claude-opus-4.8",
+        "name": "Claude Opus 4.8",
         "kind": "llm",
-        "nativeChat": true
+        "pricing": {
+          "input": 5,
+          "output": 25,
+          "cached": 0.5,
+          "reasoning": 25,
+          "cache_creation": 6.25
+        }
       },
       {
-        "id": "auto:quality",
-        "name": "Auto — Quality",
+        "id": "anthropic/claude-sonnet-5",
+        "name": "Claude Sonnet 5",
         "kind": "llm",
-        "nativeChat": true
+        "pricing": {
+          "input": 3,
+          "output": 15,
+          "cached": 0.3,
+          "reasoning": 15,
+          "cache_creation": 3.75
+        }
       },
       {
-        "id": "auto:cost",
-        "name": "Auto — Cost",
+        "id": "openai/gpt-5.2",
+        "name": "GPT-5.2",
         "kind": "llm",
-        "nativeChat": true
+        "nativeChat": true,
+        "pricing": {
+          "input": 1.75,
+          "output": 14,
+          "cached": 0.175,
+          "reasoning": 14,
+          "cache_creation": 1.75
+        }
       },
       {
-        "id": "auto:latency",
-        "name": "Auto — Latency",
+        "id": "google/gemini-3.1-flash-lite-image",
+        "name": "Gemini 3.1 Flash Lite",
         "kind": "llm",
-        "nativeChat": true
+        "nativeChat": true,
+        "pricing": {
+          "input": 0.5,
+          "output": 3,
+          "cached": 0.03,
+          "reasoning": 4.5,
+          "cache_creation": 0.5
+        }
+      },
+      {
+        "id": "x-ai/grok-4.5",
+        "name": "Grok 4.5",
+        "kind": "llm",
+        "nativeChat": true,
+        "pricing": {
+          "input": 0.5,
+          "output": 2,
+          "cached": 0.25,
+          "reasoning": 3,
+          "cache_creation": 0.5
+        }
+      },
+      {
+        "id": "deepseek/deepseek-v4-pro",
+        "name": "DeepSeek V4 Pro",
+        "kind": "llm",
+        "pricing": {
+          "input": 0.435,
+          "output": 0.87,
+          "cached": 0.003625,
+          "reasoning": 0.87,
+          "cache_creation": 0.435
+        }
+      },
+      {
+        "id": "qwen/qwen3.7-max",
+        "name": "Qwen3.7 Max",
+        "kind": "llm",
+        "nativeChat": true,
+        "pricing": {
+          "input": 0.5,
+          "output": 2,
+          "cached": 0.25,
+          "reasoning": 3,
+          "cache_creation": 0.5
+        }
+      },
+      {
+        "id": "z-ai/glm-5.2",
+        "name": "GLM-5.2",
+        "kind": "llm",
+        "nativeChat": true,
+        "pricing": {
+          "input": 1,
+          "output": 4,
+          "cached": 0.5,
+          "reasoning": 6,
+          "cache_creation": 1
+        }
+      },
+      {
+        "id": "moonshotai/kimi-k3",
+        "name": "Kimi K3",
+        "kind": "llm",
+        "nativeChat": true,
+        "pricing": {
+          "input": 1,
+          "output": 4,
+          "cached": 0.5,
+          "reasoning": 6,
+          "cache_creation": 1
+        }
+      },
+      {
+        "id": "minimax/minimax-m2.7",
+        "name": "MiniMax M2.7",
+        "kind": "llm",
+        "nativeChat": true,
+        "pricing": {
+          "input": 0.5,
+          "output": 2,
+          "cached": 0.25,
+          "reasoning": 3,
+          "cache_creation": 0.5
+        }
       }
     ],
     "openai-tts-models": [
@@ -7901,7 +8004,7 @@
       "timeoutMs": 60000
     },
     "tokenrouter": {
-      "baseUrl": "https://api.tokenrouter.io/v1/chat/completions",
+      "baseUrl": "https://api.tokenrouter.com/v1/chat/completions",
       "headers": {},
       "authHeader": "Authorization",
       "authScheme": "bearer",

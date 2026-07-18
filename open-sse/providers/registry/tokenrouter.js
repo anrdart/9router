@@ -1,18 +1,17 @@
-// TokenRouter — OpenAI-compatible intelligent LLM routing gateway (tokenrouter.io).
-// Single API key, POST /v1/chat/completions, Bearer auth. Drop-in OpenAI Chat
-// Completions wire format, so it's served by DefaultExecutor at the default
-// "openai" transport format — no custom executor, no translation hop.
+// TokenRouter — PBD TokenRouter by PaleBlueDot AI (tokenrouter.com), an
+// OpenAI-compatible unified gateway aggregating 300+ models (OpenAI, Anthropic,
+// Google, xAI, DeepSeek, Qwen, GLM, Moonshot, MiniMax, Mistral, …).
 //
-// TokenRouter's signature is routing aliases in the `model` field: "auto:<strategy>"
-// picks a provider/model automatically, and "<model>:<strategy>" pins a model but
-// still routes across accounts. Confirmed strategies (docs.tokenrouter.io
-// responses-api/modes + auto-routing, 2026-07-18): balance, cost, quality, latency.
-// Concrete provider models pass through too (openai:gpt-4o, anthropic:claude-…,
-// gpt-4o, gpt-4o:balance), so passthroughModels:true forwards any client id untouched
-// and the static seed below only lists the four auto modes as UI hints.
+// One-api/new-api style gateway (same family as AgentRouter): single API key from
+// the console, POST /v1/chat/completions, Bearer auth, served by DefaultExecutor
+// at the default "openai" transport format — no custom executor, no translation.
 //
-// No GET /v1/models is documented (live probe 404s), so there's no validateUrl /
-// modelsFetcher — the seed is static and passthrough covers everything else.
+// Model ids are the canonical vendor-prefixed upstream ids (anthropic/claude-opus-4.8,
+// openai/gpt-5.2, deepseek/deepseek-v4-pro, …). Per-key access is group-scoped
+// upstream, so validateUrl (GET /v1/models) narrows this static flagship seed to
+// what each key can actually reach, and passthroughModels forwards any of the 300+
+// ids untouched. Catalog verified against https://api.tokenrouter.com/api/pricing
+// (2026-07-18).
 export default {
   id: "tokenrouter",
   priority: 106,
@@ -24,23 +23,32 @@ export default {
     icon: "route",
     color: "#10B981",
     textIcon: "TR",
-    website: "https://tokenrouter.io",
+    website: "https://tokenrouter.com",
     notice: {
-      apiKeyUrl: "https://tokenrouter.io/console/api-keys",
-      text: "Intelligent routing gateway over OpenAI, Anthropic, Gemini, Mistral & more. Use auto:<strategy> (balance/cost/quality/latency) or any provider:model. Key from console (tr_…).",
+      apiKeyUrl: "https://www.tokenrouter.com/console/token",
+      text: "PBD TokenRouter (PaleBlueDot AI): OpenAI-compatible gateway aggregating 300+ models — Claude, GPT, Gemini, Grok, DeepSeek, Qwen, GLM and more. Get a key from the console.",
     },
   },
   category: "apikey",
   authType: "apikey",
   authModes: ["apikey"],
   transport: {
-    baseUrl: "https://api.tokenrouter.io/v1/chat/completions",
+    baseUrl: "https://api.tokenrouter.com/v1/chat/completions",
+    validateUrl: "https://api.tokenrouter.com/v1/models",
+    // deepseek/glm/qwen reasoning models expose thinking over the OpenAI reasoning_content shape.
+    thinkingFormat: "openai",
   },
   models: [
-    { id: "auto:balance", name: "Auto — Balance (cost/quality)" },
-    { id: "auto:quality", name: "Auto — Quality" },
-    { id: "auto:cost", name: "Auto — Cost" },
-    { id: "auto:latency", name: "Auto — Latency" },
+    { id: "anthropic/claude-opus-4.8", name: "Claude Opus 4.8" },
+    { id: "anthropic/claude-sonnet-5", name: "Claude Sonnet 5" },
+    { id: "openai/gpt-5.2", name: "GPT-5.2" },
+    { id: "google/gemini-3.1-flash-lite-image", name: "Gemini 3.1 Flash Lite" },
+    { id: "x-ai/grok-4.5", name: "Grok 4.5" },
+    { id: "deepseek/deepseek-v4-pro", name: "DeepSeek V4 Pro" },
+    { id: "qwen/qwen3.7-max", name: "Qwen3.7 Max" },
+    { id: "z-ai/glm-5.2", name: "GLM-5.2" },
+    { id: "moonshotai/kimi-k3", name: "Kimi K3" },
+    { id: "minimax/minimax-m2.7", name: "MiniMax M2.7" },
   ],
   passthroughModels: true,
 };
