@@ -35,8 +35,13 @@ export default {
   transport: {
     baseUrl: "https://api.tokenrouter.com/v1/chat/completions",
     validateUrl: "https://api.tokenrouter.com/v1/models",
-    // deepseek/glm/qwen reasoning models expose thinking over the OpenAI reasoning_content shape.
-    thinkingFormat: "openai",
+    // NOTE: do NOT pin a provider-wide thinkingFormat here. This gateway fronts many
+    // vendors (Claude, GPT, DeepSeek, GLM/Z.ai, Qwen…) whose reasoning wire formats
+    // differ. resolveFormat() prefers a provider-wide thinkingFormat over per-model
+    // capabilities, so pinning "openai" would force every model down the OpenAI
+    // reasoning_effort path — leaking client efforts like "xhigh" to a GLM/sglang
+    // upstream that only accepts none/low/medium/high/max (HTTP 400). Let each model's
+    // own capabilities pick its native format (glm→zai, deepseek→deepseek, …).
   },
   models: [
     { id: "anthropic/claude-opus-4.8", name: "Claude Opus 4.8" },
