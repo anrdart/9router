@@ -6105,6 +6105,32 @@
         }
       }
     ],
+    "tokenrouter": [
+      {
+        "id": "auto:balance",
+        "name": "Auto — Balance (cost/quality)",
+        "kind": "llm",
+        "nativeChat": true
+      },
+      {
+        "id": "auto:quality",
+        "name": "Auto — Quality",
+        "kind": "llm",
+        "nativeChat": true
+      },
+      {
+        "id": "auto:cost",
+        "name": "Auto — Cost",
+        "kind": "llm",
+        "nativeChat": true
+      },
+      {
+        "id": "auto:latency",
+        "name": "Auto — Latency",
+        "kind": "llm",
+        "nativeChat": true
+      }
+    ],
     "openai-tts-models": [
       {
         "id": "gpt-4o-mini-tts",
@@ -6939,6 +6965,7 @@
     "xiaomi-mimo",
     "xiaomi-tokenplan",
     "agentrouter",
+    "tokenrouter",
     "openai-tts-models",
     "openai-tts-voices",
     "openrouter-tts-models",
@@ -7019,7 +7046,8 @@
     "xai": "xai",
     "xiaomi-mimo": "xiaomi-mimo",
     "xiaomi-tokenplan": "xiaomi-tokenplan",
-    "agentrouter": "agentrouter"
+    "agentrouter": "agentrouter",
+    "tokenrouter": "tokenrouter"
   },
   "aliasToProviderId": {
     "alicode-intl": "alicode-intl",
@@ -7089,7 +7117,8 @@
     "xai": "xai",
     "xiaomi-mimo": "xiaomi-mimo",
     "xiaomi-tokenplan": "xiaomi-tokenplan",
-    "agentrouter": "agentrouter"
+    "agentrouter": "agentrouter",
+    "tokenrouter": "tokenrouter"
   },
   "providerAlias": {
     "alicode-intl": "alicode-intl",
@@ -7192,7 +7221,8 @@
     "xiaomi-mimo": "mimo",
     "xiaomi-tokenplan": "xmtp",
     "youcom": "youcom",
-    "agentrouter": "ar"
+    "agentrouter": "ar",
+    "tokenrouter": "tr"
   },
   "providerServiceKinds": {
     "alicode-intl": [
@@ -7549,6 +7579,9 @@
     ],
     "agentrouter": [
       "llm"
+    ],
+    "tokenrouter": [
+      "llm"
     ]
   },
   "providerLookup": {
@@ -7705,7 +7738,9 @@
     "xmtp": "xiaomi-tokenplan",
     "youcom": "youcom",
     "agentrouter": "agentrouter",
-    "ar": "agentrouter"
+    "ar": "agentrouter",
+    "tokenrouter": "tokenrouter",
+    "tr": "tokenrouter"
   },
   "nativeChatTransports": {
     "assemblyai": {
@@ -7860,6 +7895,13 @@
     },
     "xai": {
       "baseUrl": "https://api.x.ai/v1/chat/completions",
+      "headers": {},
+      "authHeader": "Authorization",
+      "authScheme": "bearer",
+      "timeoutMs": 60000
+    },
+    "tokenrouter": {
+      "baseUrl": "https://api.tokenrouter.io/v1/chat/completions",
       "headers": {},
       "authHeader": "Authorization",
       "authScheme": "bearer",
