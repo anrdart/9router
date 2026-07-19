@@ -29,6 +29,8 @@ export const viewport = {
 };
 
 export default function RootLayout({ children }) {
+  const googleAnalyticsId = process.env.NEXT_PUBLIC_GOOGLE_ANALYTICS_ID;
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -44,7 +46,7 @@ export default function RootLayout({ children }) {
             {children}
           </RuntimeI18nProvider>
         </ThemeProvider>
-        <GoogleAnalytics gaId={"G-LC959F603F"} />
+        {googleAnalyticsId && <GoogleAnalytics gaId={googleAnalyticsId} />}
       </body>
     </html>
   );
