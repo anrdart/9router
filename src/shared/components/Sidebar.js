@@ -119,7 +119,7 @@ export default function Sidebar({ onClose }) {
 
         {/* Logo */}
         <div className="px-6 py-4 flex flex-col gap-2">
-          <Link href="/dashboard" className="flex items-center gap-3">
+          <Link href="/dashboard" prefetch={false} className="flex items-center gap-3">
             <div className="flex items-center justify-center size-9 rounded-[10px] bg-gradient-to-br from-brand-500 to-brand-700 shadow-[var(--shadow-warm)]">
               <span className="material-symbols-outlined text-white text-[20px]">hub</span>
             </div>
@@ -162,6 +162,7 @@ export default function Sidebar({ onClose }) {
             <Link
               key={item.href}
               href={item.href}
+              prefetch={false}
               onClick={onClose}
               className={cn(
                 "flex items-center gap-3 px-3 py-1 rounded-lg transition-all group",
@@ -210,6 +211,7 @@ export default function Sidebar({ onClose }) {
                   <Link
                     key={kind.id}
                     href={`/dashboard/media-providers/${kind.id}`}
+                    prefetch={false}
                     onClick={onClose}
                     className={cn(
                       "flex items-center gap-3 px-4 py-1 rounded-lg transition-all group",
@@ -225,6 +227,7 @@ export default function Sidebar({ onClose }) {
                 <Link
                   key={COMBINED_WEB_ITEM.id}
                   href={COMBINED_WEB_ITEM.href}
+                  prefetch={false}
                   onClick={onClose}
                   className={cn(
                     "flex items-center gap-3 px-4 py-1 rounded-lg transition-all group",
@@ -243,6 +246,7 @@ export default function Sidebar({ onClose }) {
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch={false}
                 onClick={onClose}
                 className={cn(
                   "flex items-center gap-3 px-3 py-1 rounded-lg transition-all group",
@@ -270,6 +274,7 @@ export default function Sidebar({ onClose }) {
                 <Link
                   key={item.href}
                   href={item.href}
+                  prefetch={false}
                   onClick={onClose}
                   className={cn(
                     "flex items-center gap-3 px-3 py-1 rounded-lg transition-all group",
@@ -308,6 +313,7 @@ export default function Sidebar({ onClose }) {
             {/* Settings */}
             <Link
               href="/dashboard/profile"
+              prefetch={false}
               onClick={onClose}
               className={cn(
                 "flex items-center gap-3 px-3 py-1 rounded-lg transition-all group",
