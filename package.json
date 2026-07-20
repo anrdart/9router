@@ -17,7 +17,8 @@
     "cli:pack": "bun run --cwd cli pack:cli",
     "cli:publish": "bun run --cwd cli publish:cli",
     "prod:local": "bash scripts/prod-local.sh",
-    "doctor:macos": "bash scripts/doctor-macos.sh"
+    "doctor:macos": "bash scripts/doctor-macos.sh",
+    "build:icons": "python3 scripts/build-material-symbols-subset.py"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
