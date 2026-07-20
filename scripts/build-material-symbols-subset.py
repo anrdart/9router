@@ -28,7 +28,9 @@ subprocess.run([
     str(SOURCE),
     f"--output-file={OUTPUT}",
     f"--glyphs={','.join(sorted(used))}",
+    f"--text={''.join(sorted(used))}",
     "--layout-features=*",
+    "--no-layout-closure",
     "--glyph-names",
     "--symbol-cmap",
     "--legacy-cmap",
@@ -46,4 +48,12 @@ if OUTPUT.read_bytes()[:4] != b"wOF2":
     raise SystemExit("generated file is not WOFF2")
 if OUTPUT.stat().st_size >= SOURCE.stat().st_size // 2:
     raise SystemExit("generated subset is unexpectedly large")
+
+subset = TTFont(OUTPUT)
+features = {record.FeatureTag for record in subset["GSUB"].table.FeatureList.FeatureRecord}
+if "rlig" not in features:
+    raise SystemExit("generated subset lost required ligature substitutions")
+for required in ("api", "hub", "settings", "volunteer_activism"):
+    if required not in subset.getGlyphOrder():
+        raise SystemExit(f"generated subset is missing {required}")
 print(f"Material Symbols: {len(used)} glyph names, {SOURCE.stat().st_size} -> {OUTPUT.stat().st_size} bytes")
