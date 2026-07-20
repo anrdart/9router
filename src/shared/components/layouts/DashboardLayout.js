@@ -82,13 +82,11 @@ export default function DashboardLayout({ children }) {
       </div>
 
       {/* Sidebar - Mobile */}
-      <div
-        className={`fixed inset-y-0 left-0 z-50 transform lg:hidden transition-transform duration-300 ease-in-out ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
-      >
-        <Sidebar onClose={() => setSidebarOpen(false)} />
-      </div>
+      {sidebarOpen && (
+        <div className="fixed inset-y-0 left-0 z-50 transform lg:hidden transition-transform duration-300 ease-in-out translate-x-0">
+          <Sidebar onClose={() => setSidebarOpen(false)} />
+        </div>
+      )}
 
       {/* Main content */}
       <main className="flex flex-col flex-1 h-full min-w-0 relative transition-colors duration-300 isolate">
