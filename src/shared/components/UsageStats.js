@@ -12,12 +12,18 @@ function isLLMProvider(id) {
 }
 import Badge from "./Badge";
 import Card from "./Card";
+import { Skeleton } from "./Loading";
 import OverviewCards from "@/app/(dashboard)/dashboard/usage/components/OverviewCards";
 import UsageTable, { fmt, fmtTime } from "@/app/(dashboard)/dashboard/usage/components/UsageTable";
 import dynamic from "next/dynamic";
-// Lazy-load: keeps @xyflow/react out of the shared bundle until topology renders
-const ProviderTopology = dynamic(() => import("@/app/(dashboard)/dashboard/usage/components/ProviderTopology"), { ssr: false });
-import UsageChart from "@/app/(dashboard)/dashboard/usage/components/UsageChart";
+// Lazy-load chart libraries behind geometry-preserving fallbacks.
+const ProviderTopology = dynamic(() => import("@/app/(dashboard)/dashboard/usage/components/ProviderTopology"), {
+  ssr: false,
+  loading: () => <Skeleton className="h-[320px] w-full sm:h-[480px]" />,
+});
+const UsageChart = dynamic(() => import("@/app/(dashboard)/dashboard/usage/components/UsageChart"), {
+  loading: () => <Skeleton className="h-[270px] w-full" />,
+});
 
 function timeAgo(timestamp) {
   const diff = Math.floor((Date.now() - new Date(timestamp)) / 1000);
@@ -435,9 +441,21 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
 
   if (!stats && !loading) return <div className="text-text-muted">Failed to load usage statistics.</div>;
 
-  const spinner = (
-    <div className="flex items-center justify-center py-12 text-text-muted">
-      <span className="material-symbols-outlined text-[32px] animate-spin">progress_activity</span>
+  const overviewSkeleton = (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-hidden="true">
+      {[0, 1, 2, 3].map((item) => <Skeleton key={item} className="h-28 w-full" />)}
+    </div>
+  );
+  const topologySkeleton = (
+    <div className="grid min-w-0 grid-cols-1 gap-2 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]" aria-hidden="true">
+      <Skeleton className="h-[320px] w-full sm:h-[480px]" />
+      <Skeleton className="h-[320px] w-full sm:h-[480px]" />
+    </div>
+  );
+  const tableSkeleton = (
+    <div className="space-y-3" aria-hidden="true">
+      <Skeleton className="h-10 w-full" />
+      {[0, 1, 2, 3].map((item) => <Skeleton key={item} className="h-12 w-full" />)}
     </div>
   );
 
@@ -465,10 +483,10 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
       )}
 
       {/* Overview cards */}
-      {loading ? spinner : <OverviewCards stats={stats} />}
+      {loading ? overviewSkeleton : <OverviewCards stats={stats} />}
 
       {/* Provider topology + Recent Requests */}
-      {loading ? spinner : (
+      {loading ? topologySkeleton : (
         <div className="grid min-w-0 grid-cols-1 items-stretch gap-2 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
           <ProviderTopology
             providers={providers}
@@ -481,7 +499,7 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
       )}
 
       {/* Token / Cost chart - sync period */}
-      {loading ? spinner : <UsageChart period={period} />}
+      {loading ? <Skeleton className="h-[270px] w-full" aria-hidden="true" /> : <UsageChart period={period} />}
 
       {/* Table with dropdown selector */}
       <div className="flex flex-col gap-3">
@@ -511,7 +529,7 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
             </button>
           </div>
         </div>
-        {loading ? spinner : activeTableConfig && (
+        {loading ? tableSkeleton : activeTableConfig && (
           <UsageTable
             title=""
             columns={activeTableConfig.columns}
