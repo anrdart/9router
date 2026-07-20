@@ -1,5 +1,3 @@
-"use client";
-
 import { cn } from "@/shared/utils/cn";
 
 // Spinner loading
@@ -39,7 +37,7 @@ export function Skeleton({ className, ...props }) {
   return (
     <div
       className={cn(
-        "animate-pulse rounded-[10px] bg-surface-2",
+        "skeleton-shimmer rounded-[10px] bg-surface-2",
         className
       )}
       {...props}

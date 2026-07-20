@@ -3,6 +3,20 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+.skeleton-shimmer {
+  background-image: linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-text-muted) 12%, transparent), transparent);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  to { background-position-x: -200%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-shimmer { animation: none; }
+}
+
 /* ============================================================
    9Router palette — adopted from 9remote_private/web
    Brand orange (dark) / soft coral (light), neutral warm bases
