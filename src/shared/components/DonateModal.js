@@ -88,7 +88,10 @@ export default function DonateModal({ isOpen, onClose }) {
 }
 
 function DonateChannelCard({ channel }) {
-  const { label, description, icon, color, url, qr } = channel;
+  const { label, description, color, url, qr } = channel;
+  const icon = ["volunteer_activism", "qr_code_scanner", "savings", "help"].includes(channel.icon)
+    ? channel.icon
+    : "help";
   const content = (
     <>
       <div
